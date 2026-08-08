@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trailmarks — Photo & Video Trail Mapper</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper: #EDE6D6;
+    --paper-dark: #DED2B8;
+    --paper-darker: #CFC1A0;
+    --ink: #23291F;
+    --ink-soft: #565E4C;
+    --trail: #C4501F;
+    --trail-dark: #9C3E17;
+    --contour: #5C7A5C;
+    --sky: #3C5A73;
+    --shadow: rgba(35,41,31,0.18);
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--trail);
+    outline-offset: 2px;
+  }
+
+  .display { font-family: 'Fraunces', Georgia, serif; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+
+  #app { display: flex; height: 100vh; width: 100vw; }
+
+  /* ---------- Sidebar ---------- */
+
+  #sidebar {
+    width: 380px;
+    min-width: 380px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--paper);
+    border-right: 1px solid var(--paper-darker);
+    z-index: 10;
+  }
+
+  #sidebar-header { padding: 22px 22px 16px; border-bottom: 1px solid var(--paper-darker); }
+
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark { flex-shrink: 0; }
+  .brand h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.2px; }
+  .brand-sub {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+
+  #stats-line { margin-top: 14px; font-size: 12.5px; color: var(--ink-soft); min-height: 16px; }
+  #stats-line .mono { color: var(--trail-dark); }
+
+  #controls { padding: 14px 22px; border-bottom: 1px solid var(--paper-darker); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease;
+  }
+  .btn:hover { background: var(--trail-dark); }
+  .btn:active { transform: scale(0.97); }
+
+  #folder-input { display: none; }
+
+  #progress-wrap { display: none; margin-top: 12px; }
+  #progress-wrap.active { display: block; }
+  #progress-track { height: 4px; background: var(--paper-darker); border-radius: 2px; overflow: hidden; }
+  #progress-fill { height: 100%; width: 0%; background: var(--trail); transition: width 0.15s ease; }
+  #progress-text { margin-top: 6px; font-size: 11.5px; color: var(--ink-soft); }
+
+  /* ---------- Photo list ---------- */
+
+  #list-scroll { flex: 1; overflow-y: auto; padding: 8px 12px 24px; }
+
+  .list-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ink-soft);
+    padding: 14px 10px 6px;
+  }
+
+  .photo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .photo-row:hover { background: var(--paper-dark); }
+
+  .row-badge {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--trail);
+    color: var(--paper);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .row-badge.no-gps { background: transparent; border: 1px solid var(--paper-darker); color: var(--ink-soft); }
+
+  .row-thumb-wrap { flex-shrink: 0; width: 46px; height: 46px; position: relative; }
+  .row-thumb {
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--paper-dark);
+    border: 1px solid var(--paper-darker);
+    display: block;
+  }
+  .row-thumb.broken {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-soft);
+    font-size: 9px;
+    text-align: center;
+    padding: 2px;
+  }
+  .play-badge-sm {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: rgba(35,41,31,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .play-badge-sm svg { margin-left: 1px; }
+
+  .row-meta { min-width: 0; flex: 1; }
+  .row-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-time { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* ---------- Empty state ---------- */
+
+  #empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 30px;
+    color: var(--ink-soft);
+  }
+  #empty-state svg { margin-bottom: 14px; opacity: 0.55; }
+  #empty-state h2 { font-size: 18px; color: var(--ink); margin: 0 0 8px; font-weight: 600; }
+  #empty-state p { font-size: 12.5px; line-height: 1.6; max-width: 260px; margin: 0; }
+
+  /* ---------- Map ---------- */
+
+  #map-container { flex: 1; position: relative; height: 100%; }
+  #map { width: 100%; height: 100%; background: var(--paper-dark); }
+
+  #map-empty-note {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    box-shadow: 0 4px 12px var(--shadow);
+    display: none;
+    z-index: 500;
+  }
+
+  .waypoint-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50% 50% 50% 0;
+    background: var(--trail);
+    border: 2px solid var(--paper);
+    transform: rotate(-45deg);
+    box-shadow: 0 2px 6px var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .waypoint-icon span { transform: rotate(45deg); color: var(--paper); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; }
+  .waypoint-icon.start { background: var(--contour); width: 30px; height: 30px; }
+  .waypoint-icon.end { background: var(--sky); width: 30px; height: 30px; }
+  .waypoint-icon .video-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--sky);
+    border: 1.5px solid var(--paper);
+    transform: rotate(45deg);
+  }
+
+  .leaflet-popup-content-wrapper { background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); }
+  .leaflet-popup-tip { background: var(--paper); }
+  .leaflet-popup-content { margin: 0; width: 240px !important; }
+
+  .popup-thumb-wrap {
+    width: 100%;
+    height: 150px;
+    overflow: hidden;
+    border-radius: var(--radius) var(--radius) 0 0;
+    cursor: zoom-in;
+    background: var(--paper-dark);
+    position: relative;
+  }
+  .popup-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .popup-thumb-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--ink-soft);
+    font-size: 10.5px;
+    text-align: center;
+    padding: 10px;
+  }
+  .popup-zoom-hint {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    background: rgba(35,41,31,0.65);
+    color: var(--paper);
+    font-size: 9.5px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.3px;
+  }
+  .play-badge-lg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(35,41,31,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .duration-badge {
+    position: absolute;
+    bottom: 6px;
+    left: 8px;
+    background: rgba(35,41,31,0.65);
+    color: var(--paper);
+    font-size: 9.5px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+  .popup-body { padding: 12px 14px 14px; }
+  .popup-order { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--trail-dark); margin: 0 0 4px; font-weight: 500; }
+  .popup-date { font-family: 'Fraunces', serif; font-size: 15px; margin: 0 0 8px; }
+  .popup-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-top: 1px dashed var(--paper-darker); }
+  .popup-row:first-of-type { border-top: none; }
+  .popup-row .k { color: var(--ink-soft); }
+  .popup-row .v { font-family: 'JetBrains Mono', monospace; text-align: right; }
+
+  /* ---------- Lightbox ---------- */
+
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 23, 17, 0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    flex-direction: column;
+  }
+  #lightbox.active { display: flex; }
+
+  #lightbox-media-wrap { max-width: 88vw; max-height: 78vh; display: flex; align-items: center; justify-content: center; }
+  #lightbox-img, #lightbox-video {
+    max-width: 88vw;
+    max-height: 78vh;
+    object-fit: contain;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    border-radius: 4px;
+    display: none;
+  }
+  #lightbox-caption { margin-top: 16px; color: var(--paper); font-size: 12.5px; text-align: center; opacity: 0.85; }
+  #lightbox-caption .mono { color: #E3AE8F; }
+
+  .lightbox-btn {
+    position: absolute;
+    background: rgba(237,230,214,0.1);
+    border: 1px solid rgba(237,230,214,0.3);
+    color: var(--paper);
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: background 0.12s ease;
+  }
+  .lightbox-btn:hover { background: rgba(237,230,214,0.25); }
+  #lightbox-close { top: 20px; right: 24px; }
+  #lightbox-prev { left: 24px; top: 50%; transform: translateY(-50%); }
+  #lightbox-next { right: 24px; top: 50%; transform: translateY(-50%); }
+
+  @media (max-width: 760px) {
+    #app { flex-direction: column; }
+    #sidebar { width: 100%; min-width: 0; height: 42vh; order: 2; border-right: none; border-top: 1px solid var(--paper-darker); }
+    #map-container { height: 58vh; order: 1; }
+    .lightbox-btn { width: 36px; height: 36px; }
+    #lightbox-prev { left: 8px; }
+    #lightbox-next { right: 8px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .photo-row, #progress-fill { transition: none; }
+  }
+
+  #list-scroll::-webkit-scrollbar { width: 8px; }
+  #list-scroll::-webkit-scrollbar-thumb { background: var(--paper-darker); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <div class="brand">
+        <svg class="brand-mark" width="30" height="30" viewBox="0 0 30 30" fill="none">
+          <circle cx="15" cy="15" r="14" stroke="#C4501F" stroke-width="1.4"/>
+          <path d="M15 4 V8 M15 22 V26 M4 15 H8 M22 15 H26" stroke="#C4501F" stroke-width="1.4"/>
+          <path d="M15 9 L18 15 L15 21 L12 15 Z" fill="#23291F"/>
+        </svg>
+        <div>
+          <h1 class="display">Trailmarks</h1>
+          <p class="brand-sub">Photo &amp; video trail mapper</p>
+        </div>
+      </div>
+      <div id="stats-line">Select a folder to begin.</div>
+    </div>
+
+    <div id="controls">
+      <button class="btn" id="select-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#EDE6D6" stroke-width="1.8"/></svg>
+        Select photo &amp; video folder
+      </button>
+      <input type="file" id="folder-input" webkitdirectory directory multiple accept="image/*,video/*" />
+      <div id="progress-wrap">
+        <div id="progress-track"><div id="progress-fill"></div></div>
+        <div id="progress-text" class="mono"></div>
+      </div>
+    </div>
+
+    <div id="list-scroll">
+      <div id="empty-state">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+          <path d="M6 40 L18 24 L26 34 L34 20 L46 40 Z" stroke="#565E4C" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="17" cy="14" r="4" stroke="#565E4C" stroke-width="1.6"/>
+        </svg>
+        <h2 class="display">Nothing to relive yet</h2>
+        <p>Choose the folder your phone saved trip photos and videos to. Everything is read on your device — nothing is uploaded anywhere.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="map-empty-note">None of these files carry location data.</div>
+  </div>
+
+</div>
+
+<div id="lightbox">
+  <button class="lightbox-btn" id="lightbox-close" aria-label="Close">&times;</button>
+  <button class="lightbox-btn" id="lightbox-prev" aria-label="Previous item">&#8249;</button>
+  <div id="lightbox-media-wrap">
+    <img id="lightbox-img" src="" alt="Full size photo" />
+    <video id="lightbox-video" controls playsinline></video>
+  </div>
+  <button class="lightbox-btn" id="lightbox-next" aria-label="Next item">&#8250;</button>
+  <div id="lightbox-caption"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exifr/7.1.3/full.umd.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- State ----------
+  let allPhotos = [];      // every readable photo/video, chronological
+  let waypoints = [];      // items with valid GPS, chronological
+  let noGpsPhotos = [];    // items without GPS
+  let map = null;
+  let layerGroup = null;
+  let idCounter = 0;
+
+  // ---------- DOM ----------
+  const selectBtn = document.getElementById('select-btn');
+  const folderInput = document.getElementById('folder-input');
+  const progressWrap = document.getElementById('progress-wrap');
+  const progressFill = document.getElementById('progress-fill');
+  const progressText = document.getElementById('progress-text');
+  const listScroll = document.getElementById('list-scroll');
+  const emptyState = document.getElementById('empty-state');
+  const statsLine = document.getElementById('stats-line');
+  const mapEmptyNote = document.getElementById('map-empty-note');
+
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+  const lightboxVideo = document.getElementById('lightbox-video');
+  const lightboxCaption = document.getElementById('lightbox-caption');
+  const lightboxClose = document.getElementById('lightbox-close');
+  const lightboxPrev = document.getElementById('lightbox-prev');
+  const lightboxNext = document.getElementById('lightbox-next');
+
+  selectBtn.addEventListener('click', () => folderInput.click());
+  folderInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+  const IMAGE_EXT = /\.(jpe?g|png|heic|heif|tiff?|webp)$/i;
+  const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|avi|webm|mkv)$/i;
+
+  function isImageFile(file) {
+    if (file.type && file.type.startsWith('image/')) return true;
+    return IMAGE_EXT.test(file.name);
+  }
+  function isVideoFile(file) {
+    if (file.type && file.type.startsWith('video/')) return true;
+    return VIDEO_EXT.test(file.name);
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function formatDateTime(date) {
+    if (!date) return { date: 'Unknown date', time: '' };
+    try {
+      const d = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+      const t = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
+      return { date: d, time: t };
+    } catch (e) {
+      return { date: 'Unknown date', time: '' };
+    }
+  }
+
+  function formatCoord(lat, lon) {
+    const la = lat.toFixed(5);
+    const lo = lon.toFixed(5);
+    return `${Math.abs(la)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lo)}°${lon >= 0 ? 'E' : 'W'}`;
+  }
+
+  function formatDuration(sec) {
+    if (sec === null || sec === undefined || !isFinite(sec)) return null;
+    const s = Math.round(sec);
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, '0')}`;
+  }
+
+  // ---------- File intake ----------
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter((f) => isImageFile(f) || isVideoFile(f));
+    if (files.length === 0) {
+      statsLine.textContent = 'No photos or videos were found in that folder.';
+      return;
+    }
+
+    allPhotos = [];
+    waypoints = [];
+    noGpsPhotos = [];
+    idCounter = 0;
+    emptyState.style.display = 'none';
+    listScroll.innerHTML = '';
+    progressWrap.classList.add('active');
+    mapEmptyNote.style.display = 'none';
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      progressFill.style.width = `${Math.round((i / files.length) * 100)}%`;
+      progressText.textContent = `Reading metadata… ${i + 1} / ${files.length}`;
+
+      const item = isVideoFile(file) ? await readVideo(file) : await readPhoto(file);
+      if (item) allPhotos.push(item);
+
+      if (i % 3 === 0) await new Promise((r) => setTimeout(r, 0));
+    }
+
+    progressFill.style.width = '100%';
+    progressText.textContent = `Done — ${allPhotos.length} item${allPhotos.length === 1 ? '' : 's'} read.`;
+    setTimeout(() => progressWrap.classList.remove('active'), 900);
+
+    allPhotos.sort((a, b) => a.sortTime - b.sortTime);
+    waypoints = allPhotos.filter((p) => p.hasGPS);
+    noGpsPhotos = allPhotos.filter((p) => !p.hasGPS);
+
+    renderList();
+    renderMap();
+    renderStats();
+  }
+
+  // Many filenames from phone camera apps encode the exact capture
+  // moment, e.g. IMG_20260718_130514.jpg or IMG-20260718-130514.jpg.
+  // This is a much more trustworthy fallback than the file's
+  // "last modified" timestamp, which is often reset when a photo is
+  // downloaded, synced, or copied between devices.
+  function parseTimestampFromFilename(name) {
+    const m = name.match(/(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})/);
+    if (!m) return null;
+    const year = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const day = parseInt(m[3], 10);
+    if (year < 1995 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const date = new Date(year, month - 1, day, parseInt(m[4], 10), parseInt(m[5], 10), parseInt(m[6], 10));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  function resolveTimestamp(file, exifTimestamp) {
+    if (exifTimestamp) return { timestamp: exifTimestamp, approx: false };
+    const fromName = parseTimestampFromFilename(file.name);
+    if (fromName) return { timestamp: fromName, approx: true };
+    return { timestamp: new Date(file.lastModified), approx: true };
+  }
+
+  async function readPhoto(file) {
+    const id = 'p' + (idCounter++);
+    const url = URL.createObjectURL(file);
+    let exif = null;
+    try {
+      exif = await exifr.parse(file, { gps: true, tiff: true, exif: true, ifd0: true });
+    } catch (e) {
+      exif = null;
+    }
+
+    let lat = exif && typeof exif.latitude === 'number' ? exif.latitude : null;
+    let lon = exif && typeof exif.longitude === 'number' ? exif.longitude : null;
+
+    // Fallback: exifr's dedicated GPS reader sometimes succeeds even when
+    // the general parse() call misses the GPS IFD due to file quirks.
+    if (lat === null || lon === null) {
+      try {
+        const gpsOnly = await exifr.gps(file);
+        if (gpsOnly && typeof gpsOnly.latitude === 'number') {
+          lat = gpsOnly.latitude;
+          lon = gpsOnly.longitude;
+        }
+      } catch (e) {}
+    }
+    const hasGPS = lat !== null && lon !== null;
+
+    const exifTimestamp = (exif && (exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate)) || null;
+    const { timestamp, approx } = resolveTimestamp(file, exifTimestamp);
+    const sortTime = timestamp.getTime();
+
+    let camera = null;
+    if (exif && (exif.Make || exif.Model)) camera = [exif.Make, exif.Model].filter(Boolean).join(' ').trim();
+
+    const width = (exif && (exif.ExifImageWidth || exif.ImageWidth)) || null;
+    const height = (exif && (exif.ExifImageHeight || exif.ImageHeight)) || null;
+
+    return {
+      id, file, url, thumbUrl: url, isVideo: false,
+      name: file.name, size: file.size,
+      timestamp, sortTime, approxTime: approx,
+      hasGPS, lat, lon,
+      camera, width, height, duration: null,
+    };
+  }
+
+  async function readVideo(file) {
+    const id = 'p' + (idCounter++);
+    const preview = await generateVideoPreview(file);
+    const meta = await findMp4Metadata(file);
+
+    const { timestamp, approx } = resolveTimestamp(file, meta.creationDate || null);
+    const sortTime = timestamp.getTime();
+    const hasGPS = !!meta.gps;
+
+    return {
+      id, file, url: preview.url, thumbUrl: preview.thumbUrl, isVideo: true,
+      name: file.name, size: file.size,
+      timestamp, sortTime, approxTime: approx,
+      hasGPS, lat: hasGPS ? meta.gps.lat : null, lon: hasGPS ? meta.gps.lon : null,
+      camera: null, width: preview.width, height: preview.height, duration: preview.duration,
+    };
+  }
+
+  // ---------- Video preview + metadata extraction ----------
+
+  function generateVideoPreview(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const videoEl = document.createElement('video');
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoEl.preload = 'metadata';
+      videoEl.src = url;
+
+      let settled = false;
+      const finish = (result) => { if (!settled) { settled = true; resolve(result); } };
+      const timeout = setTimeout(() => finish({ url, thumbUrl: null, duration: null, width: null, height: null }), 7000);
+
+      videoEl.addEventListener('loadedmetadata', () => {
+        const duration = isFinite(videoEl.duration) ? videoEl.duration : null;
+        const seekTo = duration ? Math.min(duration > 1 ? 1 : duration / 2, duration) : 0;
+        try {
+          videoEl.currentTime = seekTo;
+        } catch (e) {
+          clearTimeout(timeout);
+          finish({ url, thumbUrl: null, duration, width: videoEl.videoWidth || null, height: videoEl.videoHeight || null });
+        }
+      });
+
+      videoEl.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const maxW = 400;
+          const vw = videoEl.videoWidth || maxW;
+          const vh = videoEl.videoHeight || maxW;
+          const scale = Math.min(1, maxW / vw);
+          canvas.width = Math.round(vw * scale);
+          canvas.height = Math.round(vh * scale);
+          canvas.getContext('2d').drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          const thumbUrl = canvas.toDataURL('image/jpeg', 0.75);
+          clearTimeout(timeout);
+          finish({
+            url, thumbUrl,
+            duration: isFinite(videoEl.duration) ? videoEl.duration : null,
+            width: videoEl.videoWidth || null, height: videoEl.videoHeight || null,
+          });
+        } catch (e) {
+          clearTimeout(timeout);
+          finish({ url, thumbUrl: null, duration: videoEl.duration || null, width: videoEl.videoWidth || null, height: videoEl.videoHeight || null });
+        }
+      });
+
+      videoEl.addEventListener('error', () => {
+        clearTimeout(timeout);
+        finish({ url, thumbUrl: null, duration: null, width: null, height: null });
+      });
+    });
+  }
+
+  // Minimal MP4/QuickTime box reader — pulls GPS (©xyz atom) and creation
+  // time (mvhd) without loading the whole file into memory. Best-effort:
+  // if a file doesn't follow the common QuickTime layout, it degrades to
+  // "no location data" the same way a photo without GPS would.
+  async function readBoxHeader(file, offset) {
+    if (offset + 8 > file.size) return null;
+    const sliceEnd = Math.min(offset + 16, file.size);
+    const buf = await file.slice(offset, sliceEnd).arrayBuffer();
+    if (buf.byteLength < 8) return null;
+    const dv = new DataView(buf);
+    let size = dv.getUint32(0);
+    const type = String.fromCharCode(dv.getUint8(4), dv.getUint8(5), dv.getUint8(6), dv.getUint8(7));
+    let headerSize = 8;
+    if (size === 1) {
+      if (buf.byteLength < 16) return null;
+      const hi = dv.getUint32(8);
+      const lo = dv.getUint32(12);
+      size = hi * 4294967296 + lo;
+      headerSize = 16;
+    } else if (size === 0) {
+      size = file.size - offset;
+    }
+    if (size < 8) return null;
+    return { type, size, headerSize, contentStart: offset + headerSize, end: offset + size };
+  }
+
+  async function findMp4Metadata(file) {
+    try {
+      let offset = 0;
+      let moovBuffer = null;
+      let guard = 0;
+      while (offset < file.size && guard < 5000) {
+        guard++;
+        const header = await readBoxHeader(file, offset);
+        if (!header) break;
+        if (header.type === 'moov') {
+          moovBuffer = await file.slice(header.contentStart, header.end).arrayBuffer();
+          break;
+        }
+        offset = header.end;
+      }
+      if (!moovBuffer) return {};
+
+      const dv = new DataView(moovBuffer);
+      let creationDate = null;
+      let gps = null;
+      const CONTAINERS = ['moov', 'trak', 'mdia', 'udta', 'minf', 'stbl', 'edts'];
+
+      function walk(start, end, depth) {
+        let off = start;
+        while (off < end - 8 && depth < 8) {
+          const size = dv.getUint32(off);
+          if (size < 8) break;
+          const type = String.fromCharCode(dv.getUint8(off + 4), dv.getUint8(off + 5), dv.getUint8(off + 6), dv.getUint8(off + 7));
+          const contentStart = off + 8;
+          const boxEnd = off + size;
+          if (boxEnd > end) break;
+
+          if (type === 'mvhd' && !creationDate) {
+            const version = dv.getUint8(contentStart);
+            const ctOffset = contentStart + 4;
+            let ct;
+            if (version === 1) {
+              const hi = dv.getUint32(ctOffset);
+              const lo = dv.getUint32(ctOffset + 4);
+              ct = hi * 4294967296 + lo;
+            } else {
+              ct = dv.getUint32(ctOffset);
+            }
+            if (ct > 0) creationDate = new Date((ct - 2082844800) * 1000);
+          } else if (type === '\u00A9xyz' && !gps) {
+            try {
+              const textLen = dv.getUint16(contentStart);
+              const textStart = contentStart + 4;
+              const bytes = new Uint8Array(moovBuffer, textStart, Math.max(0, Math.min(textLen, boxEnd - textStart)));
+              const text = new TextDecoder('utf-8').decode(bytes);
+              const m = text.match(/([+-]\d+\.\d+)([+-]\d+\.\d+)/);
+              if (m) gps = { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+            } catch (e) {}
+          } else if (CONTAINERS.includes(type)) {
+            walk(contentStart, boxEnd, depth + 1);
+          } else if (type === 'meta') {
+            walk(contentStart + 4, boxEnd, depth + 1);
+          }
+          off = boxEnd;
+        }
+      }
+      walk(0, moovBuffer.byteLength, 0);
+      return { creationDate, gps };
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // ---------- Sidebar list ----------
+
+  function renderList() {
+    listScroll.innerHTML = '';
+    if (allPhotos.length === 0) { emptyState.style.display = 'flex'; return; }
+
+    if (waypoints.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'list-section-title';
+      title.textContent = `Trail (${waypoints.length})`;
+      listScroll.appendChild(title);
+      waypoints.forEach((p, idx) => listScroll.appendChild(buildRow(p, idx + 1)));
+    }
+    if (noGpsPhotos.length > 0) {
+      const title = document.createElement('div');
+      title.className = 'list-section-title';
+      title.textContent = `No location data (${noGpsPhotos.length})`;
+      listScroll.appendChild(title);
+      if (noGpsPhotos.length === allPhotos.length) {
+        const note = document.createElement('p');
+        note.style.cssText = 'font-size:11px;color:var(--ink-soft);padding:0 10px 10px;line-height:1.5;';
+        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder — by a share sheet, chat app, or cloud download — rather than something this app can recover.';
+        listScroll.appendChild(note);
+      }
+      noGpsPhotos.forEach((p) => listScroll.appendChild(buildRow(p, null)));
+    }
+  }
+
+  function buildRow(photo, order) {
+    const row = document.createElement('div');
+    row.className = 'photo-row';
+    row.tabIndex = 0;
+
+    const badge = document.createElement('div');
+    badge.className = 'row-badge' + (order ? '' : ' no-gps');
+    badge.textContent = order ? order : '—';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'row-thumb-wrap';
+    const thumb = document.createElement('img');
+    thumb.className = 'row-thumb';
+    thumb.src = photo.thumbUrl || photo.url;
+    thumb.loading = 'lazy';
+    thumb.onerror = () => { thumb.replaceWith(makeBrokenThumb()); };
+    thumbWrap.appendChild(thumb);
+    if (photo.isVideo) {
+      thumbWrap.insertAdjacentHTML('beforeend', '<div class="play-badge-sm"><svg width="7" height="8" viewBox="0 0 7 8" fill="#EDE6D6"><path d="M0 0 L7 4 L0 8 Z"/></svg></div>');
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'row-meta';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'row-name';
+    nameEl.textContent = photo.name;
+    const timeEl = document.createElement('div');
+    timeEl.className = 'row-time mono';
+    const dt = formatDateTime(photo.timestamp);
+    const durLabel = photo.isVideo && photo.duration ? ` · ${formatDuration(photo.duration)}` : '';
+    const approxPrefix = photo.approxTime ? '~' : '';
+    timeEl.textContent = `${approxPrefix}${dt.date}${dt.time ? ' · ' + dt.time : ''}${durLabel}`;
+    meta.appendChild(nameEl);
+    meta.appendChild(timeEl);
+
+    row.appendChild(badge);
+    row.appendChild(thumbWrap);
+    row.appendChild(meta);
+
+    const activate = () => {
+      if (photo.hasGPS && photo.marker) focusMarker(photo);
+      else openLightbox(photo.id);
+    };
+    row.addEventListener('click', activate);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+
+    return row;
+  }
+
+  function makeBrokenThumb() {
+    const d = document.createElement('div');
+    d.className = 'row-thumb broken';
+    d.style.display = 'flex';
+    d.textContent = 'No preview';
+    return d;
+  }
+
+  function renderStats() {
+    if (allPhotos.length === 0) { statsLine.textContent = 'Select a folder to begin.'; return; }
+    let distanceLabel = '';
+    if (waypoints.length >= 2) {
+      let meters = 0;
+      for (let i = 1; i < waypoints.length; i++) {
+        meters += L.latLng(waypoints[i - 1].lat, waypoints[i - 1].lon).distanceTo(L.latLng(waypoints[i].lat, waypoints[i].lon));
+      }
+      distanceLabel = meters >= 1000 ? `${(meters / 1000).toFixed(1)} km trail` : `${Math.round(meters)} m trail`;
+    }
+    const videoCount = allPhotos.filter((p) => p.isVideo).length;
+    const parts = [
+      `<span class="mono">${allPhotos.length}</span> item${allPhotos.length === 1 ? '' : 's'}${videoCount ? ` (${videoCount} video${videoCount === 1 ? '' : 's'})` : ''}`,
+      `<span class="mono">${waypoints.length}</span> waypoint${waypoints.length === 1 ? '' : 's'}`,
+    ];
+    if (distanceLabel) parts.push(`<span class="mono">${distanceLabel}</span>`);
+    statsLine.innerHTML = parts.join(' · ');
+  }
+
+  // ---------- Map ----------
+
+  function ensureMap() {
+    if (map) return;
+    map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
+    }).addTo(map);
+    layerGroup = L.layerGroup().addTo(map);
+  }
+
+  function waypointIcon(kind, number, isVideo) {
+    const cls = kind === 'start' ? 'start' : kind === 'end' ? 'end' : '';
+    const dot = isVideo ? '<div class="video-dot"></div>' : '';
+    return L.divIcon({
+      className: '',
+      html: `<div class="waypoint-icon ${cls}"><span>${kind === 'start' ? 'S' : kind === 'end' ? 'F' : number}</span>${dot}</div>`,
+      iconSize: cls ? [30, 30] : [26, 26],
+      iconAnchor: cls ? [15, 30] : [13, 26],
+      popupAnchor: [0, -26],
+    });
+  }
+
+  function renderMap() {
+    ensureMap();
+    layerGroup.clearLayers();
+
+    if (waypoints.length === 0) {
+      mapEmptyNote.style.display = allPhotos.length ? 'block' : 'none';
+      return;
+    }
+    mapEmptyNote.style.display = 'none';
+
+    const latlngs = waypoints.map((p) => [p.lat, p.lon]);
+
+    if (waypoints.length > 1) {
+      L.polyline(latlngs, { color: '#C4501F', weight: 3, opacity: 0.85, dashArray: '2 10', lineCap: 'round' }).addTo(layerGroup);
+    }
+
+    waypoints.forEach((photo, idx) => {
+      const kind = idx === 0 ? 'start' : (idx === waypoints.length - 1 && waypoints.length > 1) ? 'end' : 'mid';
+      const marker = L.marker([photo.lat, photo.lon], { icon: waypointIcon(kind, idx + 1, photo.isVideo) });
+      marker.bindPopup(buildPopupHTML(photo, idx + 1), { closeButton: true, maxWidth: 260 });
+      marker.on('popupopen', () => {
+        const wrap = document.getElementById(`popup-thumb-${photo.id}`);
+        if (wrap) wrap.addEventListener('click', () => openLightbox(photo.id));
+        const img = document.querySelector(`#popup-thumb-${photo.id} img`);
+        if (img) {
+          img.onerror = () => {
+            const w = document.getElementById(`popup-thumb-${photo.id}`);
+            if (w) w.innerHTML = '<div class="popup-thumb-fallback">Preview unavailable for this format<br>— metadata still shown below.</div>';
+          };
+        }
+      });
+      marker.addTo(layerGroup);
+      photo.marker = marker;
+    });
+
+    const bounds = L.latLngBounds(latlngs);
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+  }
+
+  function buildPopupHTML(photo, order) {
+    const dt = formatDateTime(photo.timestamp);
+    const dims = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '—';
+    const durationRow = photo.isVideo
+      ? `<div class="popup-row"><span class="k">Duration</span><span class="v">${formatDuration(photo.duration) || '—'}</span></div>`
+      : '';
+    const durationBadge = photo.isVideo && photo.duration ? `<div class="duration-badge">${formatDuration(photo.duration)}</div>` : '';
+    const playBadge = photo.isVideo ? '<div class="play-badge-lg"><svg width="14" height="16" viewBox="0 0 14 16" fill="#EDE6D6"><path d="M0 0 L14 8 L0 16 Z"/></svg></div>' : '';
+
+    return `
+      <div class="popup-card">
+        <div class="popup-thumb-wrap" id="popup-thumb-${photo.id}">
+          <img src="${photo.thumbUrl || photo.url}" alt="${escapeHtml(photo.name)}" />
+          ${playBadge}
+          ${durationBadge}
+          <div class="popup-zoom-hint">${photo.isVideo ? 'Play video' : 'View full photo'}</div>
+        </div>
+        <div class="popup-body">
+          <p class="popup-order">Waypoint ${order} of ${waypoints.length}</p>
+          <p class="popup-date display">${photo.approxTime ? '~' : ''}${dt.date}${dt.time ? ' · ' + dt.time : ''}</p>
+          <div class="popup-row"><span class="k">Size</span><span class="v">${formatBytes(photo.size)}</span></div>
+          <div class="popup-row"><span class="k">Dimensions</span><span class="v">${dims}</span></div>
+          ${durationRow}
+          ${photo.camera ? `<div class="popup-row"><span class="k">Camera</span><span class="v">${escapeHtml(photo.camera)}</span></div>` : ''}
+          <div class="popup-row"><span class="k">Coordinates</span><span class="v">${formatCoord(photo.lat, photo.lon)}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function focusMarker(photo) {
+    const target = [photo.lat, photo.lon];
+    if (reducedMotion) map.setView(target, Math.max(map.getZoom(), 15));
+    else map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.9 });
+    setTimeout(() => photo.marker && photo.marker.openPopup(), reducedMotion ? 0 : 600);
+  }
+
+  // ---------- Lightbox ----------
+
+  let lightboxIndex = -1;
+
+  function openLightbox(photoId) {
+    lightboxIndex = allPhotos.findIndex((p) => p.id === photoId);
+    if (lightboxIndex === -1) return;
+    showLightboxItem();
+    lightbox.classList.add('active');
+  }
+
+  function showLightboxItem() {
+    const photo = allPhotos[lightboxIndex];
+    lightboxVideo.pause();
+    if (photo.isVideo) {
+      lightboxImg.style.display = 'none';
+      lightboxImg.src = '';
+      lightboxVideo.style.display = 'block';
+      lightboxVideo.src = photo.url;
+    } else {
+      lightboxVideo.style.display = 'none';
+      lightboxVideo.src = '';
+      lightboxImg.style.display = 'block';
+      lightboxImg.src = photo.url;
+      lightboxImg.alt = photo.name;
+    }
+    const dt = formatDateTime(photo.timestamp);
+    const loc = photo.hasGPS ? ` · <span class="mono">${formatCoord(photo.lat, photo.lon)}</span>` : '';
+    lightboxCaption.innerHTML = `${escapeHtml(photo.name)} — ${dt.date}${dt.time ? ' ' + dt.time : ''}${loc}`;
+  }
+
+  function closeLightbox() {
+    lightbox.classList.remove('active');
+    lightboxVideo.pause();
+    lightboxVideo.src = '';
+    lightboxImg.src = '';
+  }
+
+  function stepLightbox(delta) {
+    if (lightboxIndex === -1) return;
+    lightboxIndex = (lightboxIndex + delta + allPhotos.length) % allPhotos.length;
+    showLightboxItem();
+  }
+
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightboxPrev.addEventListener('click', () => stepLightbox(-1));
+  lightboxNext.addEventListener('click', () => stepLightbox(1));
+  lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', (e) => {
+    if (!lightbox.classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') stepLightbox(-1);
+    if (e.key === 'ArrowRight') stepLightbox(1);
+  });
+
+  ensureMap();
+})();
+</script>
+
+</body>
+</html>
