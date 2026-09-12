@@ -584,6 +584,82 @@
     return { timestamp: new Date(file.lastModified), approx: true };
   }
 
+  // A handful of Android camera stacks (stock AOSP camera, and some
+  // MIUI/HyperOS builds on Xiaomi/Redmi/POCO phones) write a GPS IFD full
+  // of zero bytes when location wasn't available, instead of omitting it.
+  // exifr parses that as a valid-looking (0, 0) coordinate — "Null Island",
+  // out in the Gulf of Guinea. Reject it; almost nobody's photos are
+  // actually taken there.
+  function isNullIsland(lat, lon) {
+    return Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001;
+  }
+
+  // ---------- HEIC fallback (ExifReader) ----------
+  // exifr's HEIF sniffing has a hard-coded length check on the leading
+  // `ftyp` box. Newer iPhones (iPhone 17 / iOS 26+) add extra compatible
+  // brands to that box, pushing it past exifr's ceiling — exifr then
+  // decides the file isn't HEIC at all and silently returns nothing (no
+  // GPS, no timestamp, no error). Older iPhones and most other HEIC
+  // sources are unaffected and never hit this path. ExifReader parses the
+  // HEIC container itself instead of sniffing `ftyp`, so it's used as a
+  // fallback — loaded on demand so its extra weight never ships to users
+  // who don't hit the bug.
+  let exifReaderLoadPromise = null;
+  function loadExifReader() {
+    if (window.ExifReader) return Promise.resolve(window.ExifReader);
+    if (!exifReaderLoadPromise) {
+      exifReaderLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/exifreader@4/dist/exif-reader.js';
+        script.onload = () => resolve(window.ExifReader);
+        script.onerror = () => reject(new Error('Failed to load ExifReader'));
+        document.head.appendChild(script);
+      });
+    }
+    return exifReaderLoadPromise;
+  }
+
+  // Exif dates look like "2026:07:18 13:05:14" — anchored at both ends so
+  // a date-shaped fragment inside a longer garbage string is never
+  // mistaken for a real timestamp.
+  function parseExifDateString(str) {
+    const m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(str).trim());
+    if (!m) return null;
+    const date = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  async function readWithExifReader(file) {
+    try {
+      const ExifReaderLib = await loadExifReader();
+      const buf = await file.arrayBuffer();
+      const tags = ExifReaderLib.load(buf, { expanded: true });
+
+      let lat = null, lon = null;
+      if (tags.gps && typeof tags.gps.Latitude === 'number' && typeof tags.gps.Longitude === 'number') {
+        lat = tags.gps.Latitude;
+        lon = tags.gps.Longitude;
+      }
+
+      const exifTags = tags.exif || {};
+      const dateDesc = (exifTags.DateTimeOriginal || exifTags.CreateDate || exifTags.ModifyDate);
+      const timestamp = dateDesc && dateDesc.description ? parseExifDateString(dateDesc.description) : null;
+
+      let camera = null;
+      const make = exifTags.Make && exifTags.Make.description;
+      const model = exifTags.Model && exifTags.Model.description;
+      if (make || model) camera = [make, model].filter(Boolean).join(' ').trim();
+
+      const fileTags = tags.file || {};
+      const width = (fileTags['Image Width'] && fileTags['Image Width'].value) || null;
+      const height = (fileTags['Image Height'] && fileTags['Image Height'].value) || null;
+
+      return { lat, lon, timestamp, camera, width, height };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function readPhoto(file) {
     const id = 'p' + (idCounter++);
     const url = URL.createObjectURL(file);
@@ -608,17 +684,38 @@
         }
       } catch (e) {}
     }
-    const hasGPS = lat !== null && lon !== null;
 
-    const exifTimestamp = (exif && (exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate)) || null;
-    const { timestamp, approx } = resolveTimestamp(file, exifTimestamp);
-    const sortTime = timestamp.getTime();
-
+    let exifTimestamp = (exif && (exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate)) || null;
     let camera = null;
     if (exif && (exif.Make || exif.Model)) camera = [exif.Make, exif.Model].filter(Boolean).join(' ').trim();
+    let width = (exif && (exif.ExifImageWidth || exif.ImageWidth)) || null;
+    let height = (exif && (exif.ExifImageHeight || exif.ImageHeight)) || null;
 
-    const width = (exif && (exif.ExifImageWidth || exif.ImageWidth)) || null;
-    const height = (exif && (exif.ExifImageHeight || exif.ImageHeight)) || null;
+    // exifr came back completely empty on a HEIC/HEIF file — most likely
+    // the iPhone 17 / iOS 26+ `ftyp` sniffing bug described above. Try the
+    // heavier fallback parser. Bounded to the specific failure (nothing at
+    // all came back) so a photo that genuinely has no GPS doesn't pay for
+    // a second parse pass.
+    const heicLike = /\.(heic|heif)$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+    if (heicLike && lat === null && !exifTimestamp && !camera) {
+      const fallback = await readWithExifReader(file);
+      if (fallback) {
+        if (fallback.lat !== null) { lat = fallback.lat; lon = fallback.lon; }
+        if (fallback.timestamp) exifTimestamp = fallback.timestamp;
+        if (fallback.camera) camera = fallback.camera;
+        if (fallback.width) width = fallback.width;
+        if (fallback.height) height = fallback.height;
+      }
+    }
+
+    if (lat !== null && lon !== null && isNullIsland(lat, lon)) {
+      lat = null;
+      lon = null;
+    }
+    const hasGPS = lat !== null && lon !== null;
+
+    const { timestamp, approx } = resolveTimestamp(file, exifTimestamp);
+    const sortTime = timestamp.getTime();
 
     return {
       id, file, url, thumbUrl: url, isVideo: false,
