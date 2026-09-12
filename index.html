@@ -1377,7 +1377,7 @@
       if (noGpsPhotos.length === allPhotos.length) {
         const note = document.createElement('p');
         note.style.cssText = 'font-size:11px;color:var(--ink-soft);padding:0 10px 10px;line-height:1.5;';
-        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, or cloud download, rather than something this app can recover.';
+        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, cloud download, or a phone\'s Photos/Gallery picker, rather than something this app can recover. On iPhone, try Browse instead of Photo Library; on Android, try Files instead of Photos.';
         listScroll.appendChild(note);
       }
       noGpsPhotos.forEach((p) => listScroll.appendChild(buildRow(p, null)));
