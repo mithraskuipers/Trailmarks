@@ -108,8 +108,15 @@
 
   /* ---------- Date filter ---------- */
 
-  #date-filter { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
-  #date-filter[hidden] { display: none; }
+  #filters-panel { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
+  #filters-panel[hidden] { display: none; }
+
+  .filter-section[hidden] { display: none; }
+  .filter-section + .filter-section {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--paper-darker);
+  }
 
   .date-filter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
   .date-filter-title {
@@ -162,6 +169,12 @@
   }
   .date-chip:hover { background: var(--paper-darker); }
   .date-chip.active { background: var(--trail); border-color: var(--trail); color: var(--paper); }
+
+  /* Folder chips share the pill look but get their own accent (sky blue,
+     already used for the map's end-marker) so the two filter dimensions
+     stay visually distinct, and truncate long nested paths with ellipsis. */
+  .folder-chip { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+  .folder-chip.active { background: var(--sky); border-color: var(--sky); color: var(--paper); }
 
   .date-range-row { display: flex; gap: 10px; margin-top: 10px; }
   .date-range-row[hidden] { display: none; }
@@ -542,22 +555,32 @@
       </div>
     </div>
 
-    <div id="date-filter" hidden>
-      <div class="date-filter-head">
-        <span class="date-filter-title">Filter by date</span>
-        <button type="button" id="date-range-toggle" class="date-filter-link" aria-expanded="false">Custom range</button>
-        <button type="button" id="date-filter-clear" class="date-filter-link" hidden>Clear</button>
+    <div id="filters-panel" hidden>
+      <div id="date-filter-section" class="filter-section" hidden>
+        <div class="date-filter-head">
+          <span class="date-filter-title">Filter by date</span>
+          <button type="button" id="date-range-toggle" class="date-filter-link" aria-expanded="false">Custom range</button>
+          <button type="button" id="date-filter-clear" class="date-filter-link" hidden>Clear</button>
+        </div>
+        <div id="date-chip-row" class="date-chip-row" role="group" aria-label="Filter by day"></div>
+        <div id="date-range-row" class="date-range-row" hidden>
+          <label class="date-range-field">
+            <span>From</span>
+            <input type="date" id="date-from" aria-label="Filter from date" />
+          </label>
+          <label class="date-range-field">
+            <span>To</span>
+            <input type="date" id="date-to" aria-label="Filter to date" />
+          </label>
+        </div>
       </div>
-      <div id="date-chip-row" class="date-chip-row" role="group" aria-label="Filter by day"></div>
-      <div id="date-range-row" class="date-range-row" hidden>
-        <label class="date-range-field">
-          <span>From</span>
-          <input type="date" id="date-from" aria-label="Filter from date" />
-        </label>
-        <label class="date-range-field">
-          <span>To</span>
-          <input type="date" id="date-to" aria-label="Filter to date" />
-        </label>
+
+      <div id="folder-filter-section" class="filter-section" hidden>
+        <div class="date-filter-head">
+          <span class="date-filter-title">Filter by folder</span>
+          <button type="button" id="folder-filter-clear" class="date-filter-link" hidden>Clear</button>
+        </div>
+        <div id="folder-chip-row" class="date-chip-row" role="group" aria-label="Filter by folder"></div>
       </div>
     </div>
 
@@ -609,11 +632,13 @@
   let idCounter = 0;
   let activeWaypointIdx = -1; // index into `waypoints`, set once a marker's popup is open
 
-  let visiblePhotos = [];     // allPhotos after the date filter is applied; waypoints/noGpsPhotos derive from this
+  let visiblePhotos = [];     // allPhotos after both filters are applied; waypoints/noGpsPhotos derive from this
   let distinctDays = [];      // one entry per calendar day present in allPhotos: { key, date, count }
   let activeFromKey = null;   // 'YYYY-MM-DD' inclusive lower bound of the date filter, or null for unbounded
   let activeToKey = null;     // 'YYYY-MM-DD' inclusive upper bound of the date filter, or null for unbounded
   let includeYearInLabels = false; // true once the loaded set spans more than one year, to disambiguate labels
+  let distinctFolders = [];   // one entry per distinct subfolder path present in allPhotos: { key, count }
+  let activeFolderKey = null; // subfolder path string ('' means the root of the selected folder), or null for all folders
 
   // ---------- DOM ----------
   const selectBtn = document.getElementById('select-btn');
@@ -626,13 +651,17 @@
   const statsLine = document.getElementById('stats-line');
   const mapEmptyNote = document.getElementById('map-empty-note');
 
-  const dateFilterEl = document.getElementById('date-filter');
+  const filtersPanelEl = document.getElementById('filters-panel');
+  const dateFilterSection = document.getElementById('date-filter-section');
   const dateChipRow = document.getElementById('date-chip-row');
   const dateRangeRow = document.getElementById('date-range-row');
   const dateRangeToggle = document.getElementById('date-range-toggle');
   const dateFilterClear = document.getElementById('date-filter-clear');
   const dateFromInput = document.getElementById('date-from');
   const dateToInput = document.getElementById('date-to');
+  const folderFilterSection = document.getElementById('folder-filter-section');
+  const folderChipRow = document.getElementById('folder-chip-row');
+  const folderFilterClear = document.getElementById('folder-filter-clear');
 
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-img');
@@ -659,6 +688,7 @@
     selectDateRange(activeFromKey, dateToInput.value || null);
   });
   dateFilterClear.addEventListener('click', () => selectDateRange(null, null));
+  folderFilterClear.addEventListener('click', () => selectFolder(null));
 
   const IMAGE_EXT = /\.(jpe?g|png|heic|heif|tiff?|webp)$/i;
   const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|avi|webm|mkv)$/i;
@@ -670,6 +700,19 @@
   function isVideoFile(file) {
     if (file.type && file.type.startsWith('video/')) return true;
     return VIDEO_EXT.test(file.name);
+  }
+
+  // webkitRelativePath looks like "SelectedFolder/Day 1/IMG_001.jpg". The
+  // first segment is just the name of the folder the user picked, not a
+  // real subfolder, so it is dropped along with the filename; whatever
+  // is left is the item's subfolder path. A file sitting directly in the
+  // selected folder yields '' rather than undefined, so it can still be
+  // treated as one concrete, comparable location.
+  function folderKeyForFile(file) {
+    const rel = file.webkitRelativePath || '';
+    if (!rel) return '';
+    const parts = rel.split('/');
+    return parts.slice(1, -1).join('/');
   }
 
   function formatBytes(bytes) {
@@ -722,7 +765,7 @@
     listScroll.innerHTML = '';
     progressWrap.classList.add('active');
     mapEmptyNote.style.display = 'none';
-    dateFilterEl.hidden = true;
+    filtersPanelEl.hidden = true;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -730,7 +773,10 @@
       progressText.textContent = `Reading metadata… ${i + 1} / ${files.length}`;
 
       const item = isVideoFile(file) ? await readVideo(file) : await readPhoto(file);
-      if (item) allPhotos.push(item);
+      if (item) {
+        item.folderKey = folderKeyForFile(file);
+        allPhotos.push(item);
+      }
 
       if (i % 3 === 0) await new Promise((r) => setTimeout(r, 0));
     }
@@ -740,8 +786,8 @@
     setTimeout(() => progressWrap.classList.remove('active'), 900);
 
     allPhotos.sort((a, b) => a.sortTime - b.sortTime);
-    setupDateFilter();
-    applyDateFilter();
+    setupFilters();
+    applyFilters();
   }
 
   // Many filenames from phone camera apps encode the exact capture
@@ -1084,13 +1130,15 @@
     }
   }
 
-  // ---------- Date filtering ----------
-  // A folder of trip photos usually spans several calendar days. Once we
-  // detect more than one, we surface a day-by-day filter: quick pill chips
-  // for a single day, plus an optional custom From/To range for anything
-  // wider. Filtering rebuilds `visiblePhotos` and the `waypoints` /
-  // `noGpsPhotos` lists derived from it, so the list, map, stats, and
-  // lightbox all stay in sync with whatever is currently selected.
+  // ---------- Date & folder filtering ----------
+  // A folder of trip photos usually spans several calendar days, and may
+  // also be organized into subfolders (one per day, one per device, and
+  // so on). Once we detect more than one distinct value along either
+  // dimension, we surface a filter for it: day chips plus an optional
+  // custom From/To range for dates, and folder chips for subfolders.
+  // Both dimensions combine (AND) into `visiblePhotos`, which is what
+  // `waypoints` / `noGpsPhotos` are derived from, so the list, map,
+  // stats, and lightbox all stay in sync with whatever is selected.
 
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -1124,7 +1172,24 @@
     return Array.from(map.values());
   }
 
-  function setupDateFilter() {
+  // Distinct subfolders in first-seen order. A photo sitting directly in
+  // the selected folder has folderKey === '', shown to the user as
+  // "Root"; that entry only appears if such a photo actually exists.
+  function computeDistinctFolders(photos) {
+    const map = new Map();
+    photos.forEach((p) => {
+      const key = p.folderKey;
+      if (!map.has(key)) map.set(key, { key, count: 0 });
+      map.get(key).count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.key === '') return -1;
+      if (b.key === '') return 1;
+      return a.key.localeCompare(b.key, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }
+
+  function setupFilters() {
     distinctDays = computeDistinctDays(allPhotos);
     const years = new Set(distinctDays.map((d) => d.date.getFullYear()));
     includeYearInLabels = years.size > 1;
@@ -1135,14 +1200,21 @@
     dateRangeToggle.textContent = 'Custom range';
     dateRangeToggle.setAttribute('aria-expanded', 'false');
 
-    if (distinctDays.length > 1) {
+    const showDateFilter = distinctDays.length > 1;
+    if (showDateFilter) {
       dateFromInput.min = dateToInput.min = distinctDays[0].key;
       dateFromInput.max = dateToInput.max = distinctDays[distinctDays.length - 1].key;
       renderDateChips();
-      dateFilterEl.hidden = false;
-    } else {
-      dateFilterEl.hidden = true;
     }
+    dateFilterSection.hidden = !showDateFilter;
+
+    distinctFolders = computeDistinctFolders(allPhotos);
+    activeFolderKey = null;
+    const showFolderFilter = distinctFolders.length > 1;
+    if (showFolderFilter) renderFolderChips();
+    folderFilterSection.hidden = !showFolderFilter;
+
+    filtersPanelEl.hidden = !(showDateFilter || showFolderFilter);
   }
 
   function renderDateChips() {
@@ -1178,9 +1250,9 @@
     });
   }
 
-  // Single entry point for changing the filter, from a chip, the From/To
-  // inputs, or the Clear link. Keeps activeFromKey/activeToKey, the two
-  // date inputs, and the chip highlighting all in agreement.
+  // Single entry point for changing the date filter, from a chip, the
+  // From/To inputs, or the Clear link. Keeps activeFromKey/activeToKey,
+  // the two date inputs, and the chip highlighting all in agreement.
   function selectDateRange(fromKey, toKey) {
     activeFromKey = fromKey;
     activeToKey = toKey;
@@ -1189,7 +1261,7 @@
     }
     dateFromInput.value = activeFromKey || '';
     dateToInput.value = activeToKey || '';
-    applyDateFilter();
+    applyFilters();
   }
 
   function dateRangeLabel() {
@@ -1201,21 +1273,66 @@
     return `${fromLabel} to ${toLabel}`;
   }
 
-  function applyDateFilter() {
-    visiblePhotos = (!activeFromKey && !activeToKey)
-      ? allPhotos
-      : allPhotos.filter((p) => {
-          const key = dayKey(p.timestamp);
-          if (activeFromKey && key < activeFromKey) return false;
-          if (activeToKey && key > activeToKey) return false;
-          return true;
-        });
+  function folderChipLabel(key) {
+    return key === '' ? 'Root' : key;
+  }
+
+  function renderFolderChips() {
+    folderChipRow.innerHTML = '';
+
+    const allChip = document.createElement('button');
+    allChip.type = 'button';
+    allChip.className = 'date-chip';
+    allChip.textContent = 'All';
+    allChip.addEventListener('click', () => selectFolder(null));
+    folderChipRow.appendChild(allChip);
+
+    distinctFolders.forEach((d) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'date-chip folder-chip';
+      chip.dataset.key = d.key;
+      const label = folderChipLabel(d.key);
+      chip.textContent = label;
+      chip.title = `${label} (${d.count} item${d.count === 1 ? '' : 's'})`;
+      chip.addEventListener('click', () => selectFolder(d.key));
+      folderChipRow.appendChild(chip);
+    });
+
+    highlightFolderChips();
+  }
+
+  // The root folder chip carries key === '', which is falsy but still a
+  // real selection, so presence of the data attribute (not its
+  // truthiness) is what distinguishes it from the keyless "All" chip.
+  function highlightFolderChips() {
+    folderChipRow.querySelectorAll('.date-chip').forEach((chip) => {
+      const hasKey = chip.dataset.key !== undefined;
+      const active = hasKey ? chip.dataset.key === activeFolderKey : activeFolderKey === null;
+      chip.classList.toggle('active', active);
+    });
+  }
+
+  function selectFolder(key) {
+    activeFolderKey = key;
+    applyFilters();
+  }
+
+  function applyFilters() {
+    visiblePhotos = allPhotos.filter((p) => {
+      if (activeFromKey && dayKey(p.timestamp) < activeFromKey) return false;
+      if (activeToKey && dayKey(p.timestamp) > activeToKey) return false;
+      if (activeFolderKey !== null && p.folderKey !== activeFolderKey) return false;
+      return true;
+    });
 
     waypoints = visiblePhotos.filter((p) => p.hasGPS);
     noGpsPhotos = visiblePhotos.filter((p) => !p.hasGPS);
 
     highlightChips();
+    highlightFolderChips();
     dateFilterClear.hidden = !(activeFromKey || activeToKey);
+    folderFilterClear.hidden = activeFolderKey === null;
 
     renderList();
     renderMap();
@@ -1239,7 +1356,7 @@
       return;
     }
     if (visiblePhotos.length === 0) {
-      setEmptyStateCopy('No matches in this range', 'Nothing was captured on the selected date. Try a wider range or clear the filter above.');
+      setEmptyStateCopy('No matches for this filter', 'Nothing was captured in that date range or folder. Try a wider selection or clear the filters above.');
       emptyState.style.display = 'flex';
       return;
     }
@@ -1345,6 +1462,7 @@
     ];
     if (distanceLabel) parts.push(`<span class="mono">${distanceLabel}</span>`);
     if (activeFromKey || activeToKey) parts.push(dateRangeLabel());
+    if (activeFolderKey !== null) parts.push(escapeHtml(folderChipLabel(activeFolderKey)));
     statsLine.innerHTML = parts.join(' · ');
   }
 
@@ -1408,8 +1526,8 @@
     layerGroup.clearLayers();
 
     if (waypoints.length === 0) {
-      mapEmptyNote.textContent = (activeFromKey || activeToKey)
-        ? 'None of the photos in this date range carry location data.'
+      mapEmptyNote.textContent = (activeFromKey || activeToKey || activeFolderKey !== null)
+        ? 'None of the currently filtered photos carry location data.'
         : 'None of these files carry location data.';
       mapEmptyNote.style.display = visiblePhotos.length ? 'block' : 'none';
       return;
