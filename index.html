@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Trailmarks — Photo & Video Trail Mapper</title>
+<title>Trailmarks · Photo & Video Trail Mapper</title>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -246,6 +246,11 @@
   .leaflet-popup-tip { background: var(--paper); }
   .leaflet-popup-content { margin: 0; width: 240px !important; }
 
+  .leaflet-control-layers { background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); border: none; font-family: inherit; }
+  .leaflet-control-layers-toggle { border-radius: var(--radius); }
+  .leaflet-control-layers label { color: var(--ink); font-size: 12.5px; }
+  .leaflet-control-layers-separator { border-top: 1px solid var(--paper-darker); }
+
   .popup-thumb-wrap {
     width: 100%;
     height: 150px;
@@ -414,7 +419,7 @@
           <circle cx="17" cy="14" r="4" stroke="#565E4C" stroke-width="1.6"/>
         </svg>
         <h2 class="display">Nothing to relive yet</h2>
-        <p>Choose the folder your phone saved trip photos and videos to. Everything is read on your device — nothing is uploaded anywhere.</p>
+        <p>Choose the folder your phone saved trip photos and videos to. Everything is read on your device; nothing is uploaded anywhere.</p>
       </div>
     </div>
   </div>
@@ -549,7 +554,7 @@
     }
 
     progressFill.style.width = '100%';
-    progressText.textContent = `Done — ${allPhotos.length} item${allPhotos.length === 1 ? '' : 's'} read.`;
+    progressText.textContent = `Done: ${allPhotos.length} item${allPhotos.length === 1 ? '' : 's'} read.`;
     setTimeout(() => progressWrap.classList.remove('active'), 900);
 
     allPhotos.sort((a, b) => a.sortTime - b.sortTime);
@@ -587,7 +592,7 @@
   // A handful of Android camera stacks (stock AOSP camera, and some
   // MIUI/HyperOS builds on Xiaomi/Redmi/POCO phones) write a GPS IFD full
   // of zero bytes when location wasn't available, instead of omitting it.
-  // exifr parses that as a valid-looking (0, 0) coordinate — "Null Island",
+  // exifr parses that as a valid-looking (0, 0) coordinate, "Null Island",
   // out in the Gulf of Guinea. Reject it; almost nobody's photos are
   // actually taken there.
   function isNullIsland(lat, lon) {
@@ -597,12 +602,12 @@
   // ---------- HEIC fallback (ExifReader) ----------
   // exifr's HEIF sniffing has a hard-coded length check on the leading
   // `ftyp` box. Newer iPhones (iPhone 17 / iOS 26+) add extra compatible
-  // brands to that box, pushing it past exifr's ceiling — exifr then
+  // brands to that box, pushing it past exifr's ceiling. exifr then
   // decides the file isn't HEIC at all and silently returns nothing (no
   // GPS, no timestamp, no error). Older iPhones and most other HEIC
   // sources are unaffected and never hit this path. ExifReader parses the
   // HEIC container itself instead of sniffing `ftyp`, so it's used as a
-  // fallback — loaded on demand so its extra weight never ships to users
+  // fallback, loaded on demand so its extra weight never ships to users
   // who don't hit the bug.
   let exifReaderLoadPromise = null;
   function loadExifReader() {
@@ -619,7 +624,7 @@
     return exifReaderLoadPromise;
   }
 
-  // Exif dates look like "2026:07:18 13:05:14" — anchored at both ends so
+  // Exif dates look like "2026:07:18 13:05:14", anchored at both ends so
   // a date-shaped fragment inside a longer garbage string is never
   // mistaken for a real timestamp.
   function parseExifDateString(str) {
@@ -691,7 +696,7 @@
     let width = (exif && (exif.ExifImageWidth || exif.ImageWidth)) || null;
     let height = (exif && (exif.ExifImageHeight || exif.ImageHeight)) || null;
 
-    // exifr came back completely empty on a HEIC/HEIF file — most likely
+    // exifr came back completely empty on a HEIC/HEIF file, most likely
     // the iPhone 17 / iOS 26+ `ftyp` sniffing bug described above. Try the
     // heavier fallback parser. Bounded to the specific failure (nothing at
     // all came back) so a photo that genuinely has no GPS doesn't pay for
@@ -807,7 +812,7 @@
     });
   }
 
-  // Minimal MP4/QuickTime box reader — pulls GPS (©xyz atom) and creation
+  // Minimal MP4/QuickTime box reader: pulls GPS (©xyz atom) and creation
   // time (mvhd) without loading the whole file into memory. Best-effort:
   // if a file doesn't follow the common QuickTime layout, it degrades to
   // "no location data" the same way a photo without GPS would.
@@ -922,7 +927,7 @@
       if (noGpsPhotos.length === allPhotos.length) {
         const note = document.createElement('p');
         note.style.cssText = 'font-size:11px;color:var(--ink-soft);padding:0 10px 10px;line-height:1.5;';
-        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder — by a share sheet, chat app, or cloud download — rather than something this app can recover.';
+        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, or cloud download, rather than something this app can recover.';
         listScroll.appendChild(note);
       }
       noGpsPhotos.forEach((p) => listScroll.appendChild(buildRow(p, null)));
@@ -936,7 +941,7 @@
 
     const badge = document.createElement('div');
     badge.className = 'row-badge' + (order ? '' : ' no-gps');
-    badge.textContent = order ? order : '—';
+    badge.textContent = order ? order : '-';
 
     const thumbWrap = document.createElement('div');
     thumbWrap.className = 'row-thumb-wrap';
@@ -1009,11 +1014,21 @@
 
   function ensureMap() {
     if (map) return;
-    map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      maxZoom: 17,
+    map = L.map('map', { zoomControl: true, scrollWheelZoom: true, maxZoom: 19 }).setView([20, 0], 2);
+
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors',
+    });
+    const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      maxNativeZoom: 17,
       attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
-    }).addTo(map);
+    });
+
+    osmLayer.addTo(map);
+    L.control.layers({ 'OpenStreetMap': osmLayer, 'OpenTopoMap (terrain)': topoLayer }, null, { position: 'topright' }).addTo(map);
+
     layerGroup = L.layerGroup().addTo(map);
   }
 
@@ -1056,7 +1071,7 @@
         if (img) {
           img.onerror = () => {
             const w = document.getElementById(`popup-thumb-${photo.id}`);
-            if (w) w.innerHTML = '<div class="popup-thumb-fallback">Preview unavailable for this format<br>— metadata still shown below.</div>';
+            if (w) w.innerHTML = '<div class="popup-thumb-fallback">Preview unavailable for this format<br>Metadata still shown below.</div>';
           };
         }
       });
@@ -1065,14 +1080,14 @@
     });
 
     const bounds = L.latLngBounds(latlngs);
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
   }
 
   function buildPopupHTML(photo, order) {
     const dt = formatDateTime(photo.timestamp);
-    const dims = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '—';
+    const dims = photo.width && photo.height ? `${photo.width} × ${photo.height}` : '-';
     const durationRow = photo.isVideo
-      ? `<div class="popup-row"><span class="k">Duration</span><span class="v">${formatDuration(photo.duration) || '—'}</span></div>`
+      ? `<div class="popup-row"><span class="k">Duration</span><span class="v">${formatDuration(photo.duration) || '-'}</span></div>`
       : '';
     const durationBadge = photo.isVideo && photo.duration ? `<div class="duration-badge">${formatDuration(photo.duration)}</div>` : '';
     const playBadge = photo.isVideo ? '<div class="play-badge-lg"><svg width="14" height="16" viewBox="0 0 14 16" fill="#EDE6D6"><path d="M0 0 L14 8 L0 16 Z"/></svg></div>' : '';
@@ -1104,8 +1119,8 @@
 
   function focusMarker(photo) {
     const target = [photo.lat, photo.lon];
-    if (reducedMotion) map.setView(target, Math.max(map.getZoom(), 15));
-    else map.flyTo(target, Math.max(map.getZoom(), 15), { duration: 0.9 });
+    if (reducedMotion) map.setView(target, Math.max(map.getZoom(), 18));
+    else map.flyTo(target, Math.max(map.getZoom(), 18), { duration: 0.9 });
     setTimeout(() => photo.marker && photo.marker.openPopup(), reducedMotion ? 0 : 600);
   }
 
@@ -1137,7 +1152,7 @@
     }
     const dt = formatDateTime(photo.timestamp);
     const loc = photo.hasGPS ? ` · <span class="mono">${formatCoord(photo.lat, photo.lon)}</span>` : '';
-    lightboxCaption.innerHTML = `${escapeHtml(photo.name)} — ${dt.date}${dt.time ? ' ' + dt.time : ''}${loc}`;
+    lightboxCaption.innerHTML = `${escapeHtml(photo.name)} · ${dt.date}${dt.time ? ' ' + dt.time : ''}${loc}`;
   }
 
   function closeLightbox() {
