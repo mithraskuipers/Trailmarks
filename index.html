@@ -733,13 +733,20 @@
 
     const { timestamp, approx } = resolveTimestamp(file, meta.creationDate || null);
     const sortTime = timestamp.getTime();
-    const hasGPS = !!meta.gps;
+
+    let lat = meta.gps ? meta.gps.lat : null;
+    let lon = meta.gps ? meta.gps.lon : null;
+    if (lat !== null && lon !== null && isNullIsland(lat, lon)) {
+      lat = null;
+      lon = null;
+    }
+    const hasGPS = lat !== null && lon !== null;
 
     return {
       id, file, url: preview.url, thumbUrl: preview.thumbUrl, isVideo: true,
       name: file.name, size: file.size,
       timestamp, sortTime, approxTime: approx,
-      hasGPS, lat: hasGPS ? meta.gps.lat : null, lon: hasGPS ? meta.gps.lon : null,
+      hasGPS, lat, lon,
       camera: null, width: preview.width, height: preview.height, duration: preview.duration,
     };
   }
