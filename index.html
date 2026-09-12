@@ -125,6 +125,7 @@
     transition: background 0.12s ease;
   }
   .photo-row:hover { background: var(--paper-dark); }
+  .photo-row.active { background: var(--paper-darker); box-shadow: inset 3px 0 0 var(--trail); }
 
   .row-badge {
     flex-shrink: 0;
@@ -470,6 +471,7 @@
   let map = null;
   let layerGroup = null;
   let idCounter = 0;
+  let activeWaypointIdx = -1; // index into `waypoints`, set once a marker's popup is open
 
   // ---------- DOM ----------
   const selectBtn = document.getElementById('select-btn');
@@ -549,6 +551,7 @@
     waypoints = [];
     noGpsPhotos = [];
     idCounter = 0;
+    activeWaypointIdx = -1;
     emptyState.style.display = 'none';
     listScroll.innerHTML = '';
     progressWrap.classList.add('active');
@@ -992,6 +995,7 @@
     row.addEventListener('click', activate);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
 
+    photo.rowEl = row;
     return row;
   }
 
@@ -1026,7 +1030,7 @@
 
   function ensureMap() {
     if (map) return;
-    map = L.map('map', { zoomControl: true, scrollWheelZoom: true, maxZoom: 19 }).setView([20, 0], 2);
+    map = L.map('map', { zoomControl: true, scrollWheelZoom: true, keyboard: false, maxZoom: 19 }).setView([20, 0], 2);
 
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -1057,7 +1061,7 @@
   }
 
   // Initial bearing from point A to point B, in degrees clockwise from
-  // north — matches the default (upward-pointing) orientation of the
+  // north, matching the default (upward-pointing) orientation of the
   // .trail-arrow triangle, so rotate(bearing) points it the right way.
   function bearingBetween(lat1, lon1, lat2, lon2) {
     const toRad = Math.PI / 180;
@@ -1122,9 +1126,14 @@
             if (w) w.innerHTML = '<div class="popup-thumb-fallback">Preview unavailable for this format<br>Metadata still shown below.</div>';
           };
         }
+        setActiveWaypoint(idx);
+      });
+      marker.on('popupclose', () => {
+        if (activeWaypointIdx === idx) clearActiveWaypoint();
       });
       marker.addTo(layerGroup);
       photo.marker = marker;
+      photo.waypointIndex = idx;
     });
 
     const bounds = L.latLngBounds(latlngs);
@@ -1170,6 +1179,36 @@
     if (reducedMotion) map.setView(target, Math.max(map.getZoom(), 18));
     else map.flyTo(target, Math.max(map.getZoom(), 18), { duration: 0.9 });
     setTimeout(() => photo.marker && photo.marker.openPopup(), reducedMotion ? 0 : 600);
+  }
+
+  // ---------- Marker selection & keyboard navigation ----------
+
+  function setActiveWaypoint(idx) {
+    activeWaypointIdx = idx;
+    highlightActiveRow();
+  }
+
+  function clearActiveWaypoint() {
+    activeWaypointIdx = -1;
+    highlightActiveRow();
+  }
+
+  function highlightActiveRow() {
+    document.querySelectorAll('.photo-row.active').forEach((row) => row.classList.remove('active'));
+    if (activeWaypointIdx === -1) return;
+    const photo = waypoints[activeWaypointIdx];
+    if (!photo || !photo.rowEl) return;
+    photo.rowEl.classList.add('active');
+    photo.rowEl.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' });
+  }
+
+  // Arrow-key stepping between markers, wrapping like the lightbox does.
+  // Reuses focusMarker so the map recenters and the popup reopens, which
+  // in turn fires popupopen and updates the highlighted row above.
+  function stepActiveWaypoint(delta) {
+    if (activeWaypointIdx === -1 || waypoints.length === 0) return;
+    const nextIdx = (activeWaypointIdx + delta + waypoints.length) % waypoints.length;
+    focusMarker(waypoints[nextIdx]);
   }
 
   // ---------- Lightbox ----------
@@ -1221,10 +1260,16 @@
   lightboxNext.addEventListener('click', () => stepLightbox(1));
   lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
   document.addEventListener('keydown', (e) => {
-    if (!lightbox.classList.contains('active')) return;
-    if (e.key === 'Escape') closeLightbox();
-    if (e.key === 'ArrowLeft') stepLightbox(-1);
-    if (e.key === 'ArrowRight') stepLightbox(1);
+    if (lightbox.classList.contains('active')) {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') stepLightbox(-1);
+      if (e.key === 'ArrowRight') stepLightbox(1);
+      return;
+    }
+    if (activeWaypointIdx !== -1 && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      stepActiveWaypoint(e.key === 'ArrowLeft' ? -1 : 1);
+    }
   });
 
   ensureMap();
