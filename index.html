@@ -242,6 +242,18 @@
     transform: rotate(45deg);
   }
 
+  .trail-arrow {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 9px solid var(--trail);
+    filter: drop-shadow(0 1px 1px var(--shadow));
+  }
+
+  @keyframes trail-flow { to { stroke-dashoffset: -12; } }
+  .trail-path { animation: trail-flow 1.4s linear infinite; }
+
   .leaflet-popup-content-wrapper { background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); }
   .leaflet-popup-tip { background: var(--paper); }
   .leaflet-popup-content { margin: 0; width: 240px !important; }
@@ -1044,6 +1056,27 @@
     });
   }
 
+  // Initial bearing from point A to point B, in degrees clockwise from
+  // north — matches the default (upward-pointing) orientation of the
+  // .trail-arrow triangle, so rotate(bearing) points it the right way.
+  function bearingBetween(lat1, lon1, lat2, lon2) {
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const y = Math.sin((lon2 - lon1) * toRad) * Math.cos(lat2 * toRad);
+    const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+      Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lon2 - lon1) * toRad);
+    return (Math.atan2(y, x) * toDeg + 360) % 360;
+  }
+
+  function arrowIcon(bearingDeg) {
+    return L.divIcon({
+      className: '',
+      html: `<div class="trail-arrow" style="transform: rotate(${bearingDeg}deg)"></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+  }
+
   function renderMap() {
     ensureMap();
     layerGroup.clearLayers();
@@ -1057,7 +1090,22 @@
     const latlngs = waypoints.map((p) => [p.lat, p.lon]);
 
     if (waypoints.length > 1) {
-      L.polyline(latlngs, { color: '#C4501F', weight: 3, opacity: 0.85, dashArray: '2 10', lineCap: 'round' }).addTo(layerGroup);
+      const trailLine = L.polyline(latlngs, { color: '#C4501F', weight: 3, opacity: 0.85, dashArray: '2 10', lineCap: 'round' }).addTo(layerGroup);
+      if (!reducedMotion) {
+        const pathEl = trailLine.getElement();
+        if (pathEl) pathEl.classList.add('trail-path');
+      }
+
+      // Small arrows at each segment's midpoint, rotated to the bearing
+      // between the two waypoints, make the chronological direction of
+      // travel legible at a glance rather than just implied by numbering.
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const a = waypoints[i], b = waypoints[i + 1];
+        const midLat = (a.lat + b.lat) / 2;
+        const midLon = (a.lon + b.lon) / 2;
+        const heading = bearingBetween(a.lat, a.lon, b.lat, b.lon);
+        L.marker([midLat, midLon], { icon: arrowIcon(heading), interactive: false, keyboard: false }).addTo(layerGroup);
+      }
     }
 
     waypoints.forEach((photo, idx) => {
