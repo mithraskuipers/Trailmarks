@@ -106,6 +106,89 @@
   #progress-fill { height: 100%; width: 0%; background: var(--trail); transition: width 0.15s ease; }
   #progress-text { margin-top: 6px; font-size: 11.5px; color: var(--ink-soft); }
 
+  /* ---------- Date filter ---------- */
+
+  #date-filter { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
+  #date-filter[hidden] { display: none; }
+
+  .date-filter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .date-filter-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ink-soft);
+    flex: 1;
+  }
+  .date-filter-link {
+    background: none;
+    border: none;
+    padding: 4px 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--trail-dark);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .date-filter-link[hidden] { display: none; }
+  .date-filter-link:hover { text-decoration: underline; }
+
+  .date-chip-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 3px;
+  }
+  .date-chip-row::-webkit-scrollbar { height: 5px; }
+  .date-chip-row::-webkit-scrollbar-thumb { background: var(--paper-darker); border-radius: 3px; }
+
+  .date-chip {
+    flex-shrink: 0;
+    white-space: nowrap;
+    background: var(--paper-dark);
+    border: 1px solid var(--paper-darker);
+    color: var(--ink);
+    border-radius: 20px;
+    padding: 8px 14px;
+    min-height: 34px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .date-chip:hover { background: var(--paper-darker); }
+  .date-chip.active { background: var(--trail); border-color: var(--trail); color: var(--paper); }
+
+  .date-range-row { display: flex; gap: 10px; margin-top: 10px; }
+  .date-range-row[hidden] { display: none; }
+  .date-range-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .date-range-field input[type="date"] {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--paper-darker);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-height: 38px;
+    text-transform: none;
+    letter-spacing: normal;
+    width: 100%;
+  }
+
   /* ---------- Photo list ---------- */
 
   #list-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px 24px; }
@@ -420,7 +503,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .btn, .photo-row, #progress-fill { transition: none; }
+    .btn, .photo-row, #progress-fill, .date-chip { transition: none; }
   }
 
   #list-scroll::-webkit-scrollbar { width: 8px; }
@@ -456,6 +539,25 @@
       <div id="progress-wrap">
         <div id="progress-track"><div id="progress-fill"></div></div>
         <div id="progress-text" class="mono"></div>
+      </div>
+    </div>
+
+    <div id="date-filter" hidden>
+      <div class="date-filter-head">
+        <span class="date-filter-title">Filter by date</span>
+        <button type="button" id="date-range-toggle" class="date-filter-link" aria-expanded="false">Custom range</button>
+        <button type="button" id="date-filter-clear" class="date-filter-link" hidden>Clear</button>
+      </div>
+      <div id="date-chip-row" class="date-chip-row" role="group" aria-label="Filter by day"></div>
+      <div id="date-range-row" class="date-range-row" hidden>
+        <label class="date-range-field">
+          <span>From</span>
+          <input type="date" id="date-from" aria-label="Filter from date" />
+        </label>
+        <label class="date-range-field">
+          <span>To</span>
+          <input type="date" id="date-to" aria-label="Filter to date" />
+        </label>
       </div>
     </div>
 
@@ -507,6 +609,12 @@
   let idCounter = 0;
   let activeWaypointIdx = -1; // index into `waypoints`, set once a marker's popup is open
 
+  let visiblePhotos = [];     // allPhotos after the date filter is applied; waypoints/noGpsPhotos derive from this
+  let distinctDays = [];      // one entry per calendar day present in allPhotos: { key, date, count }
+  let activeFromKey = null;   // 'YYYY-MM-DD' inclusive lower bound of the date filter, or null for unbounded
+  let activeToKey = null;     // 'YYYY-MM-DD' inclusive upper bound of the date filter, or null for unbounded
+  let includeYearInLabels = false; // true once the loaded set spans more than one year, to disambiguate labels
+
   // ---------- DOM ----------
   const selectBtn = document.getElementById('select-btn');
   const folderInput = document.getElementById('folder-input');
@@ -517,6 +625,14 @@
   const emptyState = document.getElementById('empty-state');
   const statsLine = document.getElementById('stats-line');
   const mapEmptyNote = document.getElementById('map-empty-note');
+
+  const dateFilterEl = document.getElementById('date-filter');
+  const dateChipRow = document.getElementById('date-chip-row');
+  const dateRangeRow = document.getElementById('date-range-row');
+  const dateRangeToggle = document.getElementById('date-range-toggle');
+  const dateFilterClear = document.getElementById('date-filter-clear');
+  const dateFromInput = document.getElementById('date-from');
+  const dateToInput = document.getElementById('date-to');
 
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-img');
@@ -529,6 +645,20 @@
 
   selectBtn.addEventListener('click', () => folderInput.click());
   folderInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+  dateRangeToggle.addEventListener('click', () => {
+    const opening = dateRangeRow.hidden;
+    dateRangeRow.hidden = !opening;
+    dateRangeToggle.textContent = opening ? 'Hide range' : 'Custom range';
+    dateRangeToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  });
+  dateFromInput.addEventListener('change', () => {
+    selectDateRange(dateFromInput.value || null, activeToKey);
+  });
+  dateToInput.addEventListener('change', () => {
+    selectDateRange(activeFromKey, dateToInput.value || null);
+  });
+  dateFilterClear.addEventListener('click', () => selectDateRange(null, null));
 
   const IMAGE_EXT = /\.(jpe?g|png|heic|heif|tiff?|webp)$/i;
   const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|avi|webm|mkv)$/i;
@@ -585,12 +715,14 @@
     allPhotos = [];
     waypoints = [];
     noGpsPhotos = [];
+    visiblePhotos = [];
     idCounter = 0;
     activeWaypointIdx = -1;
     emptyState.style.display = 'none';
     listScroll.innerHTML = '';
     progressWrap.classList.add('active');
     mapEmptyNote.style.display = 'none';
+    dateFilterEl.hidden = true;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -608,12 +740,8 @@
     setTimeout(() => progressWrap.classList.remove('active'), 900);
 
     allPhotos.sort((a, b) => a.sortTime - b.sortTime);
-    waypoints = allPhotos.filter((p) => p.hasGPS);
-    noGpsPhotos = allPhotos.filter((p) => !p.hasGPS);
-
-    renderList();
-    renderMap();
-    renderStats();
+    setupDateFilter();
+    applyDateFilter();
   }
 
   // Many filenames from phone camera apps encode the exact capture
@@ -956,11 +1084,166 @@
     }
   }
 
+  // ---------- Date filtering ----------
+  // A folder of trip photos usually spans several calendar days. Once we
+  // detect more than one, we surface a day-by-day filter: quick pill chips
+  // for a single day, plus an optional custom From/To range for anything
+  // wider. Filtering rebuilds `visiblePhotos` and the `waypoints` /
+  // `noGpsPhotos` lists derived from it, so the list, map, stats, and
+  // lightbox all stay in sync with whatever is currently selected.
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  // Local calendar day, not UTC, so a photo taken at 11pm groups with the
+  // rest of that evening instead of rolling into the next day.
+  function dayKey(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  }
+
+  function parseDayKey(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function dayLabel(date, includeYear) {
+    const opts = includeYear
+      ? { month: 'short', day: 'numeric', year: 'numeric' }
+      : { month: 'short', day: 'numeric' };
+    return new Intl.DateTimeFormat(undefined, opts).format(date);
+  }
+
+  // Distinct days in chronological order. Relies on allPhotos already
+  // being sorted, so a Map (which preserves insertion order) is enough.
+  function computeDistinctDays(photos) {
+    const map = new Map();
+    photos.forEach((p) => {
+      const key = dayKey(p.timestamp);
+      if (!map.has(key)) map.set(key, { key, date: p.timestamp, count: 0 });
+      map.get(key).count += 1;
+    });
+    return Array.from(map.values());
+  }
+
+  function setupDateFilter() {
+    distinctDays = computeDistinctDays(allPhotos);
+    const years = new Set(distinctDays.map((d) => d.date.getFullYear()));
+    includeYearInLabels = years.size > 1;
+
+    activeFromKey = null;
+    activeToKey = null;
+    dateRangeRow.hidden = true;
+    dateRangeToggle.textContent = 'Custom range';
+    dateRangeToggle.setAttribute('aria-expanded', 'false');
+
+    if (distinctDays.length > 1) {
+      dateFromInput.min = dateToInput.min = distinctDays[0].key;
+      dateFromInput.max = dateToInput.max = distinctDays[distinctDays.length - 1].key;
+      renderDateChips();
+      dateFilterEl.hidden = false;
+    } else {
+      dateFilterEl.hidden = true;
+    }
+  }
+
+  function renderDateChips() {
+    dateChipRow.innerHTML = '';
+
+    const allChip = document.createElement('button');
+    allChip.type = 'button';
+    allChip.className = 'date-chip';
+    allChip.textContent = 'All';
+    allChip.addEventListener('click', () => selectDateRange(null, null));
+    dateChipRow.appendChild(allChip);
+
+    distinctDays.forEach((d) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'date-chip';
+      chip.dataset.key = d.key;
+      chip.textContent = dayLabel(d.date, includeYearInLabels);
+      chip.title = `${d.count} item${d.count === 1 ? '' : 's'}`;
+      chip.addEventListener('click', () => selectDateRange(d.key, d.key));
+      dateChipRow.appendChild(chip);
+    });
+
+    highlightChips();
+  }
+
+  function highlightChips() {
+    const isAll = !activeFromKey && !activeToKey;
+    const singleKey = activeFromKey && activeFromKey === activeToKey ? activeFromKey : null;
+    dateChipRow.querySelectorAll('.date-chip').forEach((chip) => {
+      const key = chip.dataset.key || null;
+      chip.classList.toggle('active', key === null ? isAll : key === singleKey);
+    });
+  }
+
+  // Single entry point for changing the filter, from a chip, the From/To
+  // inputs, or the Clear link. Keeps activeFromKey/activeToKey, the two
+  // date inputs, and the chip highlighting all in agreement.
+  function selectDateRange(fromKey, toKey) {
+    activeFromKey = fromKey;
+    activeToKey = toKey;
+    if (activeFromKey && activeToKey && activeFromKey > activeToKey) {
+      activeToKey = activeFromKey;
+    }
+    dateFromInput.value = activeFromKey || '';
+    dateToInput.value = activeToKey || '';
+    applyDateFilter();
+  }
+
+  function dateRangeLabel() {
+    if (activeFromKey && activeToKey && activeFromKey === activeToKey) {
+      return dayLabel(parseDayKey(activeFromKey), includeYearInLabels);
+    }
+    const fromLabel = activeFromKey ? dayLabel(parseDayKey(activeFromKey), includeYearInLabels) : 'start';
+    const toLabel = activeToKey ? dayLabel(parseDayKey(activeToKey), includeYearInLabels) : 'now';
+    return `${fromLabel} to ${toLabel}`;
+  }
+
+  function applyDateFilter() {
+    visiblePhotos = (!activeFromKey && !activeToKey)
+      ? allPhotos
+      : allPhotos.filter((p) => {
+          const key = dayKey(p.timestamp);
+          if (activeFromKey && key < activeFromKey) return false;
+          if (activeToKey && key > activeToKey) return false;
+          return true;
+        });
+
+    waypoints = visiblePhotos.filter((p) => p.hasGPS);
+    noGpsPhotos = visiblePhotos.filter((p) => !p.hasGPS);
+
+    highlightChips();
+    dateFilterClear.hidden = !(activeFromKey || activeToKey);
+
+    renderList();
+    renderMap();
+    renderStats();
+  }
+
   // ---------- Sidebar list ----------
+
+  function setEmptyStateCopy(title, body) {
+    const h2 = emptyState.querySelector('h2');
+    const p = emptyState.querySelector('p');
+    if (h2) h2.textContent = title;
+    if (p) p.textContent = body;
+  }
 
   function renderList() {
     listScroll.innerHTML = '';
-    if (allPhotos.length === 0) { emptyState.style.display = 'flex'; return; }
+    if (allPhotos.length === 0) {
+      setEmptyStateCopy('Nothing to relive yet', 'Choose the folder your phone saved trip photos and videos to. Everything is read on your device; nothing is uploaded anywhere.');
+      emptyState.style.display = 'flex';
+      return;
+    }
+    if (visiblePhotos.length === 0) {
+      setEmptyStateCopy('No matches in this range', 'Nothing was captured on the selected date. Try a wider range or clear the filter above.');
+      emptyState.style.display = 'flex';
+      return;
+    }
+    emptyState.style.display = 'none';
 
     if (waypoints.length > 0) {
       const title = document.createElement('div');
@@ -1052,12 +1335,16 @@
       }
       distanceLabel = meters >= 1000 ? `${(meters / 1000).toFixed(1)} km trail` : `${Math.round(meters)} m trail`;
     }
-    const videoCount = allPhotos.filter((p) => p.isVideo).length;
+    const videoCount = visiblePhotos.filter((p) => p.isVideo).length;
+    const itemLabel = visiblePhotos.length === allPhotos.length
+      ? `<span class="mono">${visiblePhotos.length}</span> item${visiblePhotos.length === 1 ? '' : 's'}`
+      : `<span class="mono">${visiblePhotos.length}</span> of <span class="mono">${allPhotos.length}</span> item${allPhotos.length === 1 ? '' : 's'}`;
     const parts = [
-      `<span class="mono">${allPhotos.length}</span> item${allPhotos.length === 1 ? '' : 's'}${videoCount ? ` (${videoCount} video${videoCount === 1 ? '' : 's'})` : ''}`,
+      `${itemLabel}${videoCount ? ` (${videoCount} video${videoCount === 1 ? '' : 's'})` : ''}`,
       `<span class="mono">${waypoints.length}</span> waypoint${waypoints.length === 1 ? '' : 's'}`,
     ];
     if (distanceLabel) parts.push(`<span class="mono">${distanceLabel}</span>`);
+    if (activeFromKey || activeToKey) parts.push(dateRangeLabel());
     statsLine.innerHTML = parts.join(' · ');
   }
 
@@ -1121,7 +1408,10 @@
     layerGroup.clearLayers();
 
     if (waypoints.length === 0) {
-      mapEmptyNote.style.display = allPhotos.length ? 'block' : 'none';
+      mapEmptyNote.textContent = (activeFromKey || activeToKey)
+        ? 'None of the photos in this date range carry location data.'
+        : 'None of these files carry location data.';
+      mapEmptyNote.style.display = visiblePhotos.length ? 'block' : 'none';
       return;
     }
     mapEmptyNote.style.display = 'none';
@@ -1296,14 +1586,14 @@
   let lightboxIndex = -1;
 
   function openLightbox(photoId) {
-    lightboxIndex = allPhotos.findIndex((p) => p.id === photoId);
+    lightboxIndex = visiblePhotos.findIndex((p) => p.id === photoId);
     if (lightboxIndex === -1) return;
     showLightboxItem();
     lightbox.classList.add('active');
   }
 
   function showLightboxItem() {
-    const photo = allPhotos[lightboxIndex];
+    const photo = visiblePhotos[lightboxIndex];
     lightboxVideo.pause();
     if (photo.isVideo) {
       lightboxImg.style.display = 'none';
@@ -1331,7 +1621,7 @@
 
   function stepLightbox(delta) {
     if (lightboxIndex === -1) return;
-    lightboxIndex = (lightboxIndex + delta + allPhotos.length) % allPhotos.length;
+    lightboxIndex = (lightboxIndex + delta + visiblePhotos.length) % visiblePhotos.length;
     showLightboxItem();
   }
 
@@ -1340,7 +1630,7 @@
   lightboxNext.addEventListener('click', () => stepLightbox(1));
   lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
   attachSwipeNav(lightboxMediaWrap, (dir) => {
-    const photo = allPhotos[lightboxIndex];
+    const photo = visiblePhotos[lightboxIndex];
     if (photo && photo.isVideo) return; // let the video's own scrub bar handle horizontal drags
     stepLightbox(dir);
   });
