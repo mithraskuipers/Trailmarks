@@ -106,6 +106,33 @@
   #progress-fill { height: 100%; width: 0%; background: var(--trail); transition: width 0.15s ease; }
   #progress-text { margin-top: 6px; font-size: 11.5px; color: var(--ink-soft); }
 
+  /* ---------- Folder settings ---------- */
+
+  #settings-panel { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
+  #settings-panel[hidden], #settings-body[hidden] { display: none; }
+  .settings-status { font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
+  .settings-status.dirty { color: var(--trail-dark); }
+  #settings-body { margin-top: 10px; }
+  .set-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 6px 0; }
+  .set-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; margin: 6px 0; }
+  .set-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .set-field input[type="number"] {
+    width: 88px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--paper-darker);
+    border-radius: 8px;
+    padding: 6px 8px;
+    min-height: 34px;
+  }
+  .set-field input[disabled] { opacity: 0.55; }
+  .set-subtitle { margin-top: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); }
+  #set-offsets { max-height: 200px; overflow-y: auto; }
+  .set-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+  .btn.small { padding: 8px 14px; min-height: 36px; font-size: 12.5px; }
+
   /* ---------- Date filter ---------- */
 
   #filters-panel { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
@@ -561,6 +588,26 @@
       </div>
     </div>
 
+    <div id="settings-panel" hidden>
+      <div class="date-filter-head">
+        <span class="date-filter-title">Folder settings</span>
+        <button type="button" id="settings-toggle" class="date-filter-link" aria-expanded="false">Edit</button>
+      </div>
+      <div id="settings-status" class="settings-status"></div>
+      <div id="settings-body" hidden>
+        <label class="set-row"><input type="checkbox" id="set-est-enabled" /> Estimate missing locations</label>
+        <label class="set-field"><span class="set-label">Max gap between two GPS files (min)</span><input type="number" id="set-est-bracket" min="1" max="1440" step="1" /></label>
+        <label class="set-field"><span class="set-label">Max distance to nearest GPS file (min)</span><input type="number" id="set-est-nearest" min="1" max="1440" step="1" /></label>
+        <div class="set-subtitle">Camera clock offset (minutes)</div>
+        <div id="set-offsets"></div>
+        <label class="set-row"><input type="checkbox" id="set-remember-filters" /> Also remember the current filters</label>
+        <div class="set-actions">
+          <button type="button" class="btn small" id="settings-save">Save to folder</button>
+          <button type="button" class="date-filter-link" id="settings-reset">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
     <div id="filters-panel" hidden>
       <div id="date-filter-section" class="filter-section" hidden>
         <div class="date-filter-head">
@@ -652,6 +699,20 @@
   let activeToKey = null;     // 'YYYY-MM-DD' inclusive upper bound of the date filter, or null for unbounded
   let includeYearInLabels = false; // true once the loaded set spans more than one year, to disambiguate labels
   let distinctFolders = [];   // one entry per distinct subfolder path present in allPhotos: { key, count }
+  // Settings stored in trailmarks.json (see the Folder settings section).
+  const SETTINGS_FILE = 'trailmarks.json';
+  let settings = defaultSettings();
+  let settingsRaw = null;            // parsed root file, kept so unknown keys survive a save
+  let settingsFileStatus = 'none';   // 'none' | 'loaded' | 'invalid'
+  let settingsDirty = false;
+  let settingsNote = '';
+  let folderOverrides = new Map();   // subfolder path -> offset minutes, from that subfolder's own trailmarks.json
+  let rootHandle = null;             // FileSystemDirectoryHandle when the folder was opened with the directory picker
+  let useClassicPicker = false;
+  let baseLayers = {};
+  let currentBaseName = null;
+  let applyingSettings = false;
+
   let activeLocKey = null;    // 'gps' | 'est' | 'none', or null for every location source
   let activeFolderKey = null; // subfolder path string ('' means the root of the selected folder), or null for all folders
 
@@ -681,6 +742,18 @@
   const folderChipRow = document.getElementById('folder-chip-row');
   const folderFilterClear = document.getElementById('folder-filter-clear');
 
+  const settingsPanel = document.getElementById('settings-panel');
+  const settingsToggle = document.getElementById('settings-toggle');
+  const settingsStatus = document.getElementById('settings-status');
+  const settingsBody = document.getElementById('settings-body');
+  const setEstEnabled = document.getElementById('set-est-enabled');
+  const setEstBracket = document.getElementById('set-est-bracket');
+  const setEstNearest = document.getElementById('set-est-nearest');
+  const setOffsets = document.getElementById('set-offsets');
+  const setRememberFilters = document.getElementById('set-remember-filters');
+  const settingsSave = document.getElementById('settings-save');
+  const settingsReset = document.getElementById('settings-reset');
+
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightbox-img');
   const lightboxVideo = document.getElementById('lightbox-video');
@@ -690,8 +763,27 @@
   const lightboxNext = document.getElementById('lightbox-next');
   const lightboxMediaWrap = document.getElementById('lightbox-media-wrap');
 
-  selectBtn.addEventListener('click', () => folderInput.click());
-  folderInput.addEventListener('change', (e) => handleFiles(e.target.files));
+  // Where the browser allows it (Chromium on localhost or https), the folder is
+  // opened with the directory picker so trailmarks.json can be saved back into
+  // it. Everywhere else the classic folder input is used and Save downloads.
+  selectBtn.addEventListener('click', async () => {
+    if (useClassicPicker || !window.showDirectoryPicker || !window.isSecureContext) {
+      useClassicPicker = false;
+      folderInput.click();
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ id: 'trailmarks', mode: 'read' });
+      statsLine.textContent = 'Scanning folder…';
+      const files = await collectFilesFromHandle(handle);
+      handleFiles(files, handle);
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      useClassicPicker = true;
+      statsLine.textContent = 'The browser would not open that folder directly (some system folders are blocked). Click the button again to use the standard picker.';
+    }
+  });
+  folderInput.addEventListener('change', (e) => handleFiles(e.target.files, null));
 
   dateRangeToggle.addEventListener('click', () => {
     const opening = dateRangeRow.hidden;
@@ -799,8 +891,28 @@
 
   // ---------- File intake ----------
 
-  async function handleFiles(fileList) {
-    const candidates = Array.from(fileList).filter((f) => isImageFile(f) || isVideoFile(f));
+  async function collectFilesFromHandle(dir) {
+    const out = [];
+    async function walk(d, path) {
+      for await (const [name, entry] of d.entries()) {
+        if (name.startsWith('.')) continue;
+        if (entry.kind === 'directory') {
+          await walk(entry, path + name + '/');
+        } else {
+          const file = await entry.getFile();
+          Object.defineProperty(file, 'webkitRelativePath', { value: dir.name + '/' + path + name });
+          out.push(file);
+        }
+      }
+    }
+    await walk(dir, '');
+    return out;
+  }
+
+  async function handleFiles(fileList, dirHandle) {
+    const everything = Array.from(fileList);
+    await loadSettings(everything, dirHandle || null);
+    const candidates = everything.filter((f) => isImageFile(f) || isVideoFile(f));
     const files = dropInsta360Companions(candidates);
     const skippedCompanions = candidates.length - files.length;
     if (files.length === 0) {
@@ -839,13 +951,17 @@
       (skippedCompanions ? ` ${skippedCompanions} Insta360 duplicate${skippedCompanions === 1 ? '' : 's'} skipped.` : '');
     setTimeout(() => progressWrap.classList.remove('active'), 900);
 
+    allPhotos.forEach((p) => { p.baseTime = p.sortTime; });
+    applyTimeOffsets();
     allPhotos.sort((a, b) => a.sortTime - b.sortTime);
-    const estimatedCount = estimateLocations(allPhotos);
+    const estimatedCount = runEstimation();
     if (estimatedCount) {
       progressText.textContent += ` ${estimatedCount} location${estimatedCount === 1 ? '' : 's'} estimated.`;
     }
     setupFilters();
-    applyFilters();
+    applyMapLayer(settings.mapLayer);
+    applyFilterState(settings.filters);
+    renderSettingsPanel();
   }
 
   // Many filenames from phone camera apps encode the exact capture
@@ -1226,16 +1342,365 @@
     }
   }
 
+  // ---------- Folder settings (trailmarks.json) ----------
+  // An optional JSON file kept next to the photos. It is only read when a
+  // folder is opened and only written when the user clicks Save; photos and
+  // videos are never touched. Saving keeps any keys this version does not
+  // know about, and refuses to overwrite a file that is not valid JSON.
+  //
+  //   {
+  //     "app": "trailmarks", "version": 1,
+  //     "settings": {
+  //       "estimation": { "enabled": true, "maxBracketMinutes": 360, "maxNearestMinutes": 30 },
+  //       "timeOffsetMinutes": 0,
+  //       "folders": { "Day 1": { "timeOffsetMinutes": -120 } },
+  //       "mapLayer": "OpenStreetMap",
+  //       "filters": { "from": "2026-07-18", "to": null, "folder": null, "loc": null }
+  //     }
+  //   }
+  //
+  // A trailmarks.json inside a subfolder may also hold "timeOffsetMinutes";
+  // it applies to that subfolder and its children and wins over the root file.
+
+  function defaultSettings() {
+    return {
+      estimation: { enabled: true, maxBracketMinutes: 360, maxNearestMinutes: 30 },
+      timeOffsetMinutes: 0,
+      folders: {},
+      mapLayer: null,
+      filters: null,
+    };
+  }
+
+  function clampNum(v, min, max, fallback) {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+  }
+  const OFFSET_LIMIT = 2880;
+
+  function isPlainObject(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+  function sanitizeSettings(s) {
+    const d = defaultSettings();
+    if (!isPlainObject(s)) return d;
+    const e = isPlainObject(s.estimation) ? s.estimation : {};
+    d.estimation.enabled = e.enabled !== false;
+    d.estimation.maxBracketMinutes = clampNum(e.maxBracketMinutes, 1, 1440, d.estimation.maxBracketMinutes);
+    d.estimation.maxNearestMinutes = clampNum(e.maxNearestMinutes, 1, 1440, d.estimation.maxNearestMinutes);
+    d.timeOffsetMinutes = clampNum(s.timeOffsetMinutes, -OFFSET_LIMIT, OFFSET_LIMIT, 0);
+    if (isPlainObject(s.folders)) {
+      Object.keys(s.folders).forEach((k) => {
+        const f = s.folders[k];
+        if (isPlainObject(f) && Number.isFinite(Number(f.timeOffsetMinutes))) {
+          d.folders[k] = { timeOffsetMinutes: clampNum(f.timeOffsetMinutes, -OFFSET_LIMIT, OFFSET_LIMIT, 0) };
+        }
+      });
+    }
+    if (typeof s.mapLayer === 'string') d.mapLayer = s.mapLayer;
+    if (isPlainObject(s.filters)) d.filters = s.filters;
+    return d;
+  }
+
+  async function loadSettings(files, dirHandle) {
+    rootHandle = dirHandle;
+    settings = defaultSettings();
+    settingsRaw = null;
+    settingsFileStatus = 'none';
+    settingsDirty = false;
+    settingsNote = '';
+    folderOverrides = new Map();
+
+    for (const f of files.filter((x) => x.name === SETTINGS_FILE)) {
+      const key = folderKeyForFile(f);
+      let parsed = null;
+      try { parsed = JSON.parse(await f.text()); } catch (e) { parsed = null; }
+      if (!isPlainObject(parsed)) {
+        if (key === '' && settingsFileStatus === 'none') settingsFileStatus = 'invalid';
+        continue;
+      }
+      const s = isPlainObject(parsed.settings) ? parsed.settings : {};
+      if (key === '') {
+        settingsRaw = parsed;
+        settings = sanitizeSettings(s);
+        settingsFileStatus = 'loaded';
+      } else if (Number.isFinite(Number(s.timeOffsetMinutes))) {
+        folderOverrides.set(key, clampNum(s.timeOffsetMinutes, -OFFSET_LIMIT, OFFSET_LIMIT, 0));
+      }
+    }
+  }
+
+  function parentFolderKey(key) {
+    const i = key.lastIndexOf('/');
+    return i === -1 ? '' : key.slice(0, i);
+  }
+
+  // Closest match wins: the folder's own file, then root-file entry for the
+  // folder, then the same for each parent, then the default offset.
+  function offsetFor(folderKey) {
+    let k = folderKey;
+    while (k !== '') {
+      if (folderOverrides.has(k)) return folderOverrides.get(k);
+      if (Object.hasOwn(settings.folders, k)) return settings.folders[k].timeOffsetMinutes;
+      k = parentFolderKey(k);
+    }
+    return settings.timeOffsetMinutes;
+  }
+
+  function applyTimeOffsets() {
+    allPhotos.forEach((p) => {
+      p.sortTime = p.baseTime + offsetFor(p.folderKey) * 60000;
+      p.timestamp = new Date(p.sortTime);
+    });
+  }
+
+  function runEstimation() {
+    if (!settings.estimation.enabled) {
+      allPhotos.forEach((p) => {
+        p.estimated = false;
+        if (!p.hasGPS) { p.lat = null; p.lon = null; }
+      });
+      return 0;
+    }
+    return estimateLocations(allPhotos);
+  }
+
+  function captureFilters() {
+    return { from: activeFromKey, to: activeToKey, folder: activeFolderKey, loc: activeLocKey };
+  }
+
+  function applyFilterState(f) {
+    f = isPlainObject(f) ? f : {};
+    const isKey = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    activeFromKey = isKey(f.from) ? f.from : null;
+    activeToKey = isKey(f.to) ? f.to : null;
+    if (activeFromKey && activeToKey && activeFromKey > activeToKey) activeToKey = activeFromKey;
+    dateFromInput.value = activeFromKey || '';
+    dateToInput.value = activeToKey || '';
+    activeFolderKey = (typeof f.folder === 'string' && distinctFolders.some((d) => d.key === f.folder)) ? f.folder : null;
+    const locOk = f.loc === 'gps' || f.loc === 'none' || (f.loc === 'est' && allPhotos.some((p) => p.estimated));
+    activeLocKey = locOk ? f.loc : null;
+    applyFilters();
+  }
+
+  // Re-derive everything that depends on timestamps or estimation settings
+  // while keeping whatever filters the user currently has.
+  function refreshDerived() {
+    if (allPhotos.length === 0) return;
+    const keep = captureFilters();
+    applyTimeOffsets();
+    allPhotos.sort((a, b) => a.sortTime - b.sortTime);
+    runEstimation();
+    setupFilters();
+    applyFilterState(keep);
+  }
+
+  function applyMapLayer(name) {
+    if (!map || typeof name !== 'string' || !Object.hasOwn(baseLayers, name) || name === currentBaseName) return;
+    applyingSettings = true;
+    try {
+      map.removeLayer(baseLayers[currentBaseName]);
+      baseLayers[name].addTo(map);
+      currentBaseName = name;
+    } finally {
+      applyingSettings = false;
+    }
+  }
+
+  function markSettingsDirty() {
+    settingsDirty = true;
+    settingsNote = '';
+    renderSettingsStatus();
+  }
+
+  function renderSettingsStatus() {
+    let text;
+    if (settingsFileStatus === 'invalid') {
+      text = `${SETTINGS_FILE} in this folder is not valid JSON, so it will not be overwritten. Save downloads a fresh copy instead.`;
+    } else if (settingsNote) {
+      text = settingsNote;
+    } else if (settingsDirty) {
+      text = 'Unsaved changes.';
+    } else if (settingsFileStatus === 'loaded') {
+      const n = folderOverrides.size;
+      text = `Loaded ${SETTINGS_FILE}${n ? ` and ${n} subfolder override${n === 1 ? '' : 's'}` : ''}.`;
+    } else if (folderOverrides.size) {
+      text = `Loaded ${folderOverrides.size} subfolder override${folderOverrides.size === 1 ? '' : 's'}. No root ${SETTINGS_FILE} yet.`;
+    } else {
+      text = `No ${SETTINGS_FILE} in this folder yet. Nothing is written until you click Save.`;
+    }
+    text += rootHandle
+      ? ' Saving writes into the folder you opened.'
+      : ' This browser cannot write into the folder, so Save downloads the file; put it in the photo folder.';
+    settingsStatus.textContent = text;
+    settingsStatus.classList.toggle('dirty', settingsDirty && !settingsNote);
+  }
+
+  function renderOffsetRows() {
+    setOffsets.innerHTML = '';
+    const addRow = (key, label, value, locked) => {
+      const row = document.createElement('label');
+      row.className = 'set-field';
+      const span = document.createElement('span');
+      span.className = 'set-label';
+      span.textContent = label;
+      span.title = label;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '1';
+      input.min = String(-OFFSET_LIMIT);
+      input.max = String(OFFSET_LIMIT);
+      input.value = String(value);
+      if (locked) { input.disabled = true; input.title = `Set by ${key}/${SETTINGS_FILE}`; }
+      input.addEventListener('change', () => {
+        const v = clampNum(input.value, -OFFSET_LIMIT, OFFSET_LIMIT, 0);
+        if (key === null) {
+          settings.timeOffsetMinutes = v;
+        } else if (v === offsetFor(parentFolderKey(key))) {
+          delete settings.folders[key];
+        } else {
+          settings.folders[key] = { timeOffsetMinutes: v };
+        }
+        markSettingsDirty();
+        refreshDerived();
+        renderOffsetRows();
+      });
+      row.appendChild(span);
+      row.appendChild(input);
+      setOffsets.appendChild(row);
+    };
+    addRow(null, 'All folders (default)', settings.timeOffsetMinutes, false);
+    distinctFolders.filter((d) => d.key !== '').forEach((d) => {
+      addRow(d.key, d.key, offsetFor(d.key), folderOverrides.has(d.key));
+    });
+  }
+
+  function renderSettingsPanel() {
+    settingsPanel.hidden = false;
+    setEstEnabled.checked = settings.estimation.enabled;
+    setEstBracket.value = settings.estimation.maxBracketMinutes;
+    setEstNearest.value = settings.estimation.maxNearestMinutes;
+    setRememberFilters.checked = !!settings.filters;
+    renderOffsetRows();
+    renderSettingsStatus();
+  }
+
+  function downloadText(text, filename) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function buildSettingsJson(base) {
+    const prev = isPlainObject(base) && isPlainObject(base.settings) ? base.settings : {};
+    const prevFolders = isPlainObject(prev.folders) ? prev.folders : {};
+    const folders = {};
+    Object.keys(settings.folders).forEach((k) => {
+      folders[k] = { ...(isPlainObject(prevFolders[k]) ? prevFolders[k] : {}), ...settings.folders[k] };
+    });
+    const out = {
+      ...(isPlainObject(base) ? base : {}),
+      app: 'trailmarks',
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      settings: {
+        ...prev,
+        estimation: { ...(isPlainObject(prev.estimation) ? prev.estimation : {}), ...settings.estimation },
+        timeOffsetMinutes: settings.timeOffsetMinutes,
+        folders,
+        mapLayer: settings.mapLayer,
+      },
+    };
+    if (setRememberFilters.checked) out.settings.filters = captureFilters();
+    else delete out.settings.filters;
+    return out;
+  }
+
+  async function saveSettings() {
+    if (rootHandle && settingsFileStatus !== 'invalid') {
+      try {
+        let perm = await rootHandle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') perm = await rootHandle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') throw new Error('Write permission was not granted');
+
+        // Re-read the file right before writing so edits made elsewhere are kept.
+        let existing = null;
+        try {
+          const handle0 = await rootHandle.getFileHandle(SETTINGS_FILE);
+          const text0 = await (await handle0.getFile()).text();
+          try { existing = JSON.parse(text0); } catch (e) { settingsFileStatus = 'invalid'; }
+        } catch (e) { /* no file yet */ }
+
+        if (settingsFileStatus !== 'invalid') {
+          const text = JSON.stringify(buildSettingsJson(existing), null, 2) + '\n';
+          const fh = await rootHandle.getFileHandle(SETTINGS_FILE, { create: true });
+          const w = await fh.createWritable();
+          await w.write(text);
+          await w.close();
+          settingsRaw = JSON.parse(text);
+          settingsFileStatus = 'loaded';
+          settingsDirty = false;
+          settingsNote = `Saved ${rootHandle.name}/${SETTINGS_FILE}.`;
+          renderSettingsStatus();
+          return;
+        }
+      } catch (e) {
+        settingsNote = `Could not write into the folder (${e && e.message ? e.message : 'unknown error'}). Downloaded the file instead.`;
+      }
+    }
+    downloadText(JSON.stringify(buildSettingsJson(settingsRaw), null, 2) + '\n', SETTINGS_FILE);
+    if (!settingsNote || settingsFileStatus === 'invalid') {
+      settingsNote = `Downloaded ${SETTINGS_FILE}. Put it in the photo folder to use it next time.`;
+    }
+    renderSettingsStatus();
+  }
+
+  settingsToggle.addEventListener('click', () => {
+    const opening = settingsBody.hidden;
+    settingsBody.hidden = !opening;
+    settingsToggle.textContent = opening ? 'Hide' : 'Edit';
+    settingsToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  });
+  setEstEnabled.addEventListener('change', () => {
+    settings.estimation.enabled = setEstEnabled.checked;
+    markSettingsDirty();
+    refreshDerived();
+  });
+  setEstBracket.addEventListener('change', () => {
+    settings.estimation.maxBracketMinutes = clampNum(setEstBracket.value, 1, 1440, 360);
+    setEstBracket.value = settings.estimation.maxBracketMinutes;
+    markSettingsDirty();
+    refreshDerived();
+  });
+  setEstNearest.addEventListener('change', () => {
+    settings.estimation.maxNearestMinutes = clampNum(setEstNearest.value, 1, 1440, 30);
+    setEstNearest.value = settings.estimation.maxNearestMinutes;
+    markSettingsDirty();
+    refreshDerived();
+  });
+  setRememberFilters.addEventListener('change', markSettingsDirty);
+  settingsSave.addEventListener('click', saveSettings);
+  settingsReset.addEventListener('click', () => {
+    const layer = settings.mapLayer;
+    settings = defaultSettings();
+    settings.mapLayer = layer;
+    markSettingsDirty();
+    refreshDerived();
+    renderSettingsPanel();
+  });
+
   // ---------- Location estimation ----------
   // A file without GPS is placed using the files around it in time. If a
-  // file with GPS exists both before and after it (at most 6 h apart), the
-  // position is interpolated along that gap. Otherwise it borrows the
-  // position of the nearest GPS file if that one is within 30 minutes.
+  // file with GPS exists both before and after it (no further apart than the
+  // "max gap" setting, 6 h by default), the position is interpolated along
+  // that gap. Otherwise it borrows the position of the nearest GPS file if
+  // that one is within the "nearest" setting (30 minutes by default).
   // Files whose only timestamp is the file's last-modified date are skipped
   // as too unreliable, and are never used as anchors either.
-  const EST_MAX_BRACKET_MS = 6 * 3600 * 1000;
-  const EST_MAX_NEAREST_MS = 30 * 60 * 1000;
-
   function lerpLon(a, b, f) {
     let d = b - a;
     if (d > 180) d -= 360; else if (d < -180) d += 360;
@@ -1245,9 +1710,14 @@
   }
 
   function estimateLocations(photos) {
+    const bracketMs = settings.estimation.maxBracketMinutes * 60000;
+    const nearestMs = settings.estimation.maxNearestMinutes * 60000;
     const reliable = (p) => p.timeSource !== 'modified';
     const anchors = photos.filter((p) => p.hasGPS && reliable(p));
-    photos.forEach((p) => { p.estimated = false; });
+    photos.forEach((p) => {
+      p.estimated = false;
+      if (!p.hasGPS) { p.lat = null; p.lon = null; }
+    });
     if (anchors.length === 0) return 0;
 
     let count = 0;
@@ -1260,7 +1730,7 @@
       const before = prev ? p.sortTime - prev.sortTime : null;
       const after = next ? next.sortTime - p.sortTime : null;
 
-      if (prev && next && next.sortTime - prev.sortTime <= EST_MAX_BRACKET_MS) {
+      if (prev && next && next.sortTime - prev.sortTime <= bracketMs) {
         const f = (p.sortTime - prev.sortTime) / (next.sortTime - prev.sortTime);
         p.lat = prev.lat + (next.lat - prev.lat) * f;
         p.lon = lerpLon(prev.lon, next.lon, f);
@@ -1271,7 +1741,7 @@
         const useNext = next && (!prev || after < before);
         const src = useNext ? next : prev;
         const gap = useNext ? after : before;
-        if (!src || gap > EST_MAX_NEAREST_MS) return;
+        if (!src || gap > nearestMs) return;
         p.lat = src.lat;
         p.lon = src.lon;
         p.estBasis = 'nearest';
@@ -1821,7 +2291,13 @@
     });
 
     osmLayer.addTo(map);
-    L.control.layers({ 'OpenStreetMap': osmLayer, 'OpenTopoMap (terrain)': topoLayer }, null, { position: 'topright' }).addTo(map);
+    baseLayers = { 'OpenStreetMap': osmLayer, 'OpenTopoMap (terrain)': topoLayer };
+    currentBaseName = 'OpenStreetMap';
+    L.control.layers(baseLayers, null, { position: 'topright' }).addTo(map);
+    map.on('baselayerchange', (e) => {
+      currentBaseName = e.name;
+      if (!applyingSettings) { settings.mapLayer = e.name; markSettingsDirty(); }
+    });
 
     layerGroup = L.layerGroup().addTo(map);
   }
