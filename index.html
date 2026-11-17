@@ -242,6 +242,8 @@
     justify-content: center;
   }
   .row-badge.no-gps { background: transparent; border: 1px solid var(--paper-darker); color: var(--ink-soft); }
+  .row-badge.est { background: transparent; border: 1px dashed var(--trail); color: var(--trail-dark); }
+  .loc-chip-est { border-style: dashed; border-color: var(--trail); }
 
   .row-thumb-wrap { flex-shrink: 0; width: 46px; height: 46px; position: relative; }
   .row-thumb {
@@ -330,6 +332,8 @@
     position: relative;
   }
   .waypoint-icon span { transform: rotate(45deg); color: var(--paper); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; }
+  .waypoint-icon.est { background: var(--paper); border: 2px dashed var(--trail); box-shadow: 0 2px 6px var(--shadow); }
+  .waypoint-icon.est span { color: var(--trail-dark); }
   .waypoint-icon.start { background: var(--contour); width: 30px; height: 30px; }
   .waypoint-icon.end { background: var(--sky); width: 30px; height: 30px; }
   .waypoint-icon .video-dot {
@@ -451,6 +455,8 @@
   .popup-order { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--trail-dark); margin: 0 0 4px; font-weight: 500; }
   .popup-nav .popup-order { margin: 0; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .popup-date { font-family: 'Fraunces', serif; font-size: 15px; margin: 0 0 8px; }
+  .est-banner { display: inline-block; margin: 0 0 6px; padding: 2px 9px; border: 1px dashed var(--trail); border-radius: 10px; font-size: 10.5px; color: var(--trail-dark); letter-spacing: 0.3px; }
+  .est-note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--ink-soft); }
   .popup-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-top: 1px dashed var(--paper-darker); }
   .popup-row:first-of-type { border-top: none; }
   .popup-row .k { color: var(--ink-soft); }
@@ -548,7 +554,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#EDE6D6" stroke-width="1.8"/></svg>
         Select photo &amp; video folder
       </button>
-      <input type="file" id="folder-input" webkitdirectory directory multiple accept="image/*,video/*" />
+      <input type="file" id="folder-input" webkitdirectory directory multiple accept="image/*,video/*,.insv,.insp,.lrv,.heic,.heif" />
       <div id="progress-wrap">
         <div id="progress-track"><div id="progress-fill"></div></div>
         <div id="progress-text" class="mono"></div>
@@ -573,6 +579,14 @@
             <input type="date" id="date-to" aria-label="Filter to date" />
           </label>
         </div>
+      </div>
+
+      <div id="loc-filter-section" class="filter-section" hidden>
+        <div class="date-filter-head">
+          <span class="date-filter-title">Filter by location source</span>
+          <button type="button" id="loc-filter-clear" class="date-filter-link" hidden>Clear</button>
+        </div>
+        <div id="loc-chip-row" class="date-chip-row" role="group" aria-label="Filter by location source"></div>
       </div>
 
       <div id="folder-filter-section" class="filter-section" hidden>
@@ -638,6 +652,7 @@
   let activeToKey = null;     // 'YYYY-MM-DD' inclusive upper bound of the date filter, or null for unbounded
   let includeYearInLabels = false; // true once the loaded set spans more than one year, to disambiguate labels
   let distinctFolders = [];   // one entry per distinct subfolder path present in allPhotos: { key, count }
+  let activeLocKey = null;    // 'gps' | 'est' | 'none', or null for every location source
   let activeFolderKey = null; // subfolder path string ('' means the root of the selected folder), or null for all folders
 
   // ---------- DOM ----------
@@ -659,6 +674,9 @@
   const dateFilterClear = document.getElementById('date-filter-clear');
   const dateFromInput = document.getElementById('date-from');
   const dateToInput = document.getElementById('date-to');
+  const locFilterSection = document.getElementById('loc-filter-section');
+  const locChipRow = document.getElementById('loc-chip-row');
+  const locFilterClear = document.getElementById('loc-filter-clear');
   const folderFilterSection = document.getElementById('folder-filter-section');
   const folderChipRow = document.getElementById('folder-chip-row');
   const folderFilterClear = document.getElementById('folder-filter-clear');
@@ -689,9 +707,10 @@
   });
   dateFilterClear.addEventListener('click', () => selectDateRange(null, null));
   folderFilterClear.addEventListener('click', () => selectFolder(null));
+  locFilterClear.addEventListener('click', () => selectLocKey(null));
 
-  const IMAGE_EXT = /\.(jpe?g|png|heic|heif|tiff?|webp)$/i;
-  const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|avi|webm|mkv)$/i;
+  const IMAGE_EXT = /\.(jpe?g|png|heic|heif|tiff?|webp|insp)$/i;
+  const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|avi|webm|mkv|insv|lrv)$/i;
 
   function isImageFile(file) {
     if (file.type && file.type.startsWith('image/')) return true;
@@ -713,6 +732,38 @@
     if (!rel) return '';
     const parts = rel.split('/');
     return parts.slice(1, -1).join('/');
+  }
+
+  // Insta360 files have no registered MIME type, so the browser reports an
+  // empty type and may refuse to decode them. .insv/.lrv are MP4 containers
+  // and .insp is a JPEG; slice() re-labels the same bytes without copying.
+  function mediaUrl(file) {
+    let type = null;
+    if (!file.type) {
+      if (/\.(insv|lrv)$/i.test(file.name)) type = 'video/mp4';
+      else if (/\.insp$/i.test(file.name)) type = 'image/jpeg';
+    }
+    return URL.createObjectURL(type ? file.slice(0, file.size, type) : file);
+  }
+
+  // Insta360 cameras write one file per lens (VID_..._00_001.insv and
+  // VID_..._10_001.insv) plus a low-res LRV_..._01_001.mp4 proxy beside each
+  // video. They describe the same capture, so keep only the primary file.
+  function dropInsta360Companions(files) {
+    const keyOf = (f) => folderKeyForFile(f) + '/' + f.name.toLowerCase();
+    const present = new Set(files.map(keyOf));
+    return files.filter((f) => {
+      const dir = folderKeyForFile(f) + '/';
+      let m = /^(VID|IMG)_(\d{8}_\d{6})_(\d{2})_(\d{3})\.(insv|insp)$/i.exec(f.name);
+      if (m && m[3] !== '00') {
+        return !present.has(dir + `${m[1]}_${m[2]}_00_${m[4]}.${m[5]}`.toLowerCase());
+      }
+      m = /^LRV_(\d{8}_\d{6})_\d{2}_(\d{3})\.mp4$/i.exec(f.name);
+      if (m) {
+        return !present.has(dir + `vid_${m[1]}_00_${m[2]}.insv`.toLowerCase());
+      }
+      return true;
+    });
   }
 
   function formatBytes(bytes) {
@@ -749,7 +800,9 @@
   // ---------- File intake ----------
 
   async function handleFiles(fileList) {
-    const files = Array.from(fileList).filter((f) => isImageFile(f) || isVideoFile(f));
+    const candidates = Array.from(fileList).filter((f) => isImageFile(f) || isVideoFile(f));
+    const files = dropInsta360Companions(candidates);
+    const skippedCompanions = candidates.length - files.length;
     if (files.length === 0) {
       statsLine.textContent = 'No photos or videos were found in that folder.';
       return;
@@ -782,10 +835,15 @@
     }
 
     progressFill.style.width = '100%';
-    progressText.textContent = `Done: ${allPhotos.length} item${allPhotos.length === 1 ? '' : 's'} read.`;
+    progressText.textContent = `Done: ${allPhotos.length} item${allPhotos.length === 1 ? '' : 's'} read.` +
+      (skippedCompanions ? ` ${skippedCompanions} Insta360 duplicate${skippedCompanions === 1 ? '' : 's'} skipped.` : '');
     setTimeout(() => progressWrap.classList.remove('active'), 900);
 
     allPhotos.sort((a, b) => a.sortTime - b.sortTime);
+    const estimatedCount = estimateLocations(allPhotos);
+    if (estimatedCount) {
+      progressText.textContent += ` ${estimatedCount} location${estimatedCount === 1 ? '' : 's'} estimated.`;
+    }
     setupFilters();
     applyFilters();
   }
@@ -795,9 +853,18 @@
   // This is a much more trustworthy fallback than the file's
   // "last modified" timestamp, which is often reset when a photo is
   // downloaded, synced, or copied between devices.
+  // Xiaomi/WeChat style names embed a 13-digit epoch in milliseconds,
+  // e.g. mmexport1721300000000.jpg.
+  function parseEpochFromFilename(name) {
+    const m = name.match(/(?:^|\D)(1[3-9]\d{11})(?:\D|$)/);
+    if (!m) return null;
+    const date = new Date(parseInt(m[1], 10));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
   function parseTimestampFromFilename(name) {
     const m = name.match(/(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})/);
-    if (!m) return null;
+    if (!m) return parseEpochFromFilename(name);
     const year = parseInt(m[1], 10);
     const month = parseInt(m[2], 10);
     const day = parseInt(m[3], 10);
@@ -807,10 +874,10 @@
   }
 
   function resolveTimestamp(file, exifTimestamp) {
-    if (exifTimestamp) return { timestamp: exifTimestamp, approx: false };
+    if (exifTimestamp) return { timestamp: exifTimestamp, approx: false, source: 'metadata' };
     const fromName = parseTimestampFromFilename(file.name);
-    if (fromName) return { timestamp: fromName, approx: true };
-    return { timestamp: new Date(file.lastModified), approx: true };
+    if (fromName) return { timestamp: fromName, approx: true, source: 'filename' };
+    return { timestamp: new Date(file.lastModified), approx: true, source: 'modified' };
   }
 
   // A handful of Android camera stacks (stock AOSP camera, and some
@@ -821,6 +888,13 @@
   // actually taken there.
   function isNullIsland(lat, lon) {
     return Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001;
+  }
+
+  // Some MIUI/HyperOS files carry GPS tags with zero denominators, which
+  // parse as NaN or out-of-range numbers rather than being absent.
+  function validCoord(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) &&
+      Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !isNullIsland(lat, lon);
   }
 
   // ---------- HEIC fallback (ExifReader) ----------
@@ -891,7 +965,7 @@
 
   async function readPhoto(file) {
     const id = 'p' + (idCounter++);
-    const url = URL.createObjectURL(file);
+    const url = mediaUrl(file);
     let exif = null;
     try {
       exif = await exifr.parse(file, { gps: true, tiff: true, exif: true, ifd0: true });
@@ -904,7 +978,7 @@
 
     // Fallback: exifr's dedicated GPS reader sometimes succeeds even when
     // the general parse() call misses the GPS IFD due to file quirks.
-    if (lat === null || lon === null) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       try {
         const gpsOnly = await exifr.gps(file);
         if (gpsOnly && typeof gpsOnly.latitude === 'number') {
@@ -937,21 +1011,28 @@
       }
     }
 
-    if (lat !== null && lon !== null && isNullIsland(lat, lon)) {
+    if (!validCoord(lat, lon)) {
       lat = null;
       lon = null;
     }
+
+    // Insta360 .insp stills usually keep GPS in a proprietary trailer, not EXIF.
+    if (lat === null && /\.insp$/i.test(file.name)) {
+      const g = await readInsta360Gps(file);
+      if (g) { lat = g.lat; lon = g.lon; }
+    }
     const hasGPS = lat !== null && lon !== null;
 
-    const { timestamp, approx } = resolveTimestamp(file, exifTimestamp);
+    const { timestamp, approx, source } = resolveTimestamp(file, exifTimestamp);
     const sortTime = timestamp.getTime();
 
     return {
       id, file, url, thumbUrl: url, isVideo: false,
       name: file.name, size: file.size,
-      timestamp, sortTime, approxTime: approx,
+      timestamp, sortTime, approxTime: approx, timeSource: source,
       hasGPS, lat, lon,
       camera, width, height, duration: null,
+      isHeic: heicLike,
     };
   }
 
@@ -960,21 +1041,27 @@
     const preview = await generateVideoPreview(file);
     const meta = await findMp4Metadata(file);
 
-    const { timestamp, approx } = resolveTimestamp(file, meta.creationDate || null);
+    const { timestamp, approx, source } = resolveTimestamp(file, meta.creationDate || null);
     const sortTime = timestamp.getTime();
 
     let lat = meta.gps ? meta.gps.lat : null;
     let lon = meta.gps ? meta.gps.lon : null;
-    if (lat !== null && lon !== null && isNullIsland(lat, lon)) {
+    if (!validCoord(lat, lon)) {
       lat = null;
       lon = null;
+    }
+    // Insta360 .insv (and some exported .mp4) files keep GPS in a trailer
+    // appended after the last MP4 box.
+    if (lat === null) {
+      const g = await readInsta360Gps(file);
+      if (g) { lat = g.lat; lon = g.lon; }
     }
     const hasGPS = lat !== null && lon !== null;
 
     return {
       id, file, url: preview.url, thumbUrl: preview.thumbUrl, isVideo: true,
       name: file.name, size: file.size,
-      timestamp, sortTime, approxTime: approx,
+      timestamp, sortTime, approxTime: approx, timeSource: source,
       hasGPS, lat, lon,
       camera: null, width: preview.width, height: preview.height, duration: preview.duration,
     };
@@ -984,7 +1071,7 @@
 
   function generateVideoPreview(file) {
     return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
+      const url = mediaUrl(file);
       const videoEl = document.createElement('video');
       videoEl.muted = true;
       videoEl.playsInline = true;
@@ -1112,12 +1199,21 @@
               const textStart = contentStart + 4;
               const bytes = new Uint8Array(moovBuffer, textStart, Math.max(0, Math.min(textLen, boxEnd - textStart)));
               const text = new TextDecoder('utf-8').decode(bytes);
-              const m = text.match(/([+-]\d+\.\d+)([+-]\d+\.\d+)/);
+              const m = text.match(/([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)/);
               if (m) gps = { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
             } catch (e) {}
           } else if (CONTAINERS.includes(type)) {
             walk(contentStart, boxEnd, depth + 1);
           } else if (type === 'meta') {
+            // iPhone .mov also stores com.apple.quicktime.location.ISO6709
+            // here, e.g. +52.1234+005.1234+012.000/
+            if (!gps) {
+              try {
+                const txt = new TextDecoder('latin1').decode(new Uint8Array(moovBuffer, contentStart, boxEnd - contentStart));
+                const iso = txt.match(/([+-]\d{1,2}\.\d+)([+-]\d{1,3}\.\d+)(?:[+-]\d+(?:\.\d+)?)?\//);
+                if (iso) gps = { lat: parseFloat(iso[1]), lon: parseFloat(iso[2]) };
+              } catch (e) {}
+            }
             walk(contentStart + 4, boxEnd, depth + 1);
           }
           off = boxEnd;
@@ -1128,6 +1224,187 @@
     } catch (e) {
       return {};
     }
+  }
+
+  // ---------- Location estimation ----------
+  // A file without GPS is placed using the files around it in time. If a
+  // file with GPS exists both before and after it (at most 6 h apart), the
+  // position is interpolated along that gap. Otherwise it borrows the
+  // position of the nearest GPS file if that one is within 30 minutes.
+  // Files whose only timestamp is the file's last-modified date are skipped
+  // as too unreliable, and are never used as anchors either.
+  const EST_MAX_BRACKET_MS = 6 * 3600 * 1000;
+  const EST_MAX_NEAREST_MS = 30 * 60 * 1000;
+
+  function lerpLon(a, b, f) {
+    let d = b - a;
+    if (d > 180) d -= 360; else if (d < -180) d += 360;
+    let r = a + d * f;
+    if (r > 180) r -= 360; else if (r < -180) r += 360;
+    return r;
+  }
+
+  function estimateLocations(photos) {
+    const reliable = (p) => p.timeSource !== 'modified';
+    const anchors = photos.filter((p) => p.hasGPS && reliable(p));
+    photos.forEach((p) => { p.estimated = false; });
+    if (anchors.length === 0) return 0;
+
+    let count = 0;
+    let i = 0;
+    photos.forEach((p) => {
+      if (p.hasGPS || !reliable(p)) return;
+      while (i < anchors.length && anchors[i].sortTime < p.sortTime) i++;
+      const prev = i > 0 ? anchors[i - 1] : null;
+      const next = i < anchors.length ? anchors[i] : null;
+      const before = prev ? p.sortTime - prev.sortTime : null;
+      const after = next ? next.sortTime - p.sortTime : null;
+
+      if (prev && next && next.sortTime - prev.sortTime <= EST_MAX_BRACKET_MS) {
+        const f = (p.sortTime - prev.sortTime) / (next.sortTime - prev.sortTime);
+        p.lat = prev.lat + (next.lat - prev.lat) * f;
+        p.lon = lerpLon(prev.lon, next.lon, f);
+        p.estBasis = 'between';
+        p.estBeforeMs = before;
+        p.estAfterMs = after;
+      } else {
+        const useNext = next && (!prev || after < before);
+        const src = useNext ? next : prev;
+        const gap = useNext ? after : before;
+        if (!src || gap > EST_MAX_NEAREST_MS) return;
+        p.lat = src.lat;
+        p.lon = src.lon;
+        p.estBasis = 'nearest';
+        p.estBeforeMs = useNext ? null : gap;
+        p.estAfterMs = useNext ? gap : null;
+      }
+      p.estimated = true;
+      count++;
+    });
+    return count;
+  }
+
+  function formatGap(ms) {
+    const min = Math.round(ms / 60000);
+    if (min < 1) return 'under a minute';
+    if (min < 90) return `${min} min`;
+    const h = ms / 3600000;
+    return `${h.toFixed(h < 10 ? 1 : 0)} h`;
+  }
+
+  function estimateNote(p) {
+    if (p.estBasis === 'between') {
+      return `Interpolated between two files with GPS, ${formatGap(p.estBeforeMs)} before and ${formatGap(p.estAfterMs)} after this one.`;
+    }
+    const gap = p.estBeforeMs !== null ? p.estBeforeMs : p.estAfterMs;
+    const side = p.estBeforeMs !== null ? 'before' : 'after';
+    return `Copied from the nearest file with GPS, taken ${formatGap(gap)} ${side} this one.`;
+  }
+
+  function hasLocation(p) { return p.hasGPS || p.estimated; }
+
+  // ---------- Insta360 trailer ----------
+  // .insv/.insp files end with a proprietary trailer. Layout (little endian):
+  //   records: [data][u16 id][u32 length], back to back
+  //   footer (last 78 bytes): first 6 bytes are the last record's id/length,
+  //   u32 total trailer length at offset 38, 32-byte magic at offset 46.
+  // Record 0x700 is GPS, 53 bytes per fix:
+  //   u32 unix time, u32 unknown, u16 ms, char fix (A/V),
+  //   f64 lat, char N/S, f64 lon, char E/W, f64 speed, f64 track, f64 altitude
+  const INSTA360_MAGIC = '8db42d694ccc418790edff439fe026bf';
+  const INSTA360_GPS_REC = 53;
+
+  function parseInsta360GpsRecords(buf) {
+    const dv = new DataView(buf);
+    for (let p = 0; p + INSTA360_GPS_REC <= buf.byteLength; p += INSTA360_GPS_REC) {
+      if (dv.getUint8(p + 10) !== 0x41) continue; // 'A' = valid fix, skip void fixes
+      const ns = String.fromCharCode(dv.getUint8(p + 19));
+      const ew = String.fromCharCode(dv.getUint8(p + 28));
+      if ((ns !== 'N' && ns !== 'S') || (ew !== 'E' && ew !== 'W' && ew !== 'O')) continue;
+      let lat = Math.abs(dv.getFloat64(p + 11, true));
+      let lon = Math.abs(dv.getFloat64(p + 20, true));
+      if (ns === 'S') lat = -lat;
+      if (ew !== 'E') lon = -lon;
+      if (validCoord(lat, lon)) return { lat, lon };
+    }
+    return null;
+  }
+
+  async function readInsta360Gps(file) {
+    try {
+      if (file.size < 78 + 6) return null;
+      const footer = await file.slice(file.size - 78).arrayBuffer();
+      const fb = new Uint8Array(footer);
+      let magic = '';
+      for (let i = 46; i < 78; i++) magic += String.fromCharCode(fb[i]);
+      if (magic !== INSTA360_MAGIC) return null;
+
+      const fdv = new DataView(footer);
+      const trailerLen = fdv.getUint32(38, true);
+      const trailerStart = file.size - trailerLen;
+      if (trailerLen < 78 || trailerStart < 0) return null;
+
+      let id = fdv.getUint16(0, true);
+      let len = fdv.getUint32(2, true);
+      let headerPos = file.size - 78; // where the current record's id/length sit
+      for (let guard = 0; guard < 512; guard++) {
+        const dataStart = headerPos - len;
+        if (dataStart < trailerStart) break;
+        if (id === 0x700 && len >= INSTA360_GPS_REC) {
+          const cap = Math.min(len, 4 * 1024 * 1024);
+          const gps = parseInsta360GpsRecords(await file.slice(dataStart, dataStart + cap).arrayBuffer());
+          if (gps) return gps;
+        }
+        headerPos = dataStart - 6;
+        if (headerPos < trailerStart) break;
+        const hdr = new DataView(await file.slice(headerPos, headerPos + 6).arrayBuffer());
+        id = hdr.getUint16(0, true);
+        len = hdr.getUint32(2, true);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ---------- HEIC preview fallback ----------
+  // Safari shows HEIC natively; Chrome, Edge and Firefox usually do not. When
+  // an <img> fails on a HEIC file, convert it to JPEG on demand (one at a
+  // time) with heic2any, loaded only if that actually happens.
+  let heic2anyLoadPromise = null;
+  let heicQueue = Promise.resolve();
+
+  function loadHeic2any() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (!heic2anyLoadPromise) {
+      heic2anyLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+        script.onload = () => resolve(window.heic2any);
+        script.onerror = () => { heic2anyLoadPromise = null; reject(new Error('Failed to load heic2any')); };
+        document.head.appendChild(script);
+      });
+    }
+    return heic2anyLoadPromise;
+  }
+
+  function canConvertHeic(photo) {
+    return !!photo && !photo.isVideo && !!photo.isHeic;
+  }
+
+  function convertHeic(photo) {
+    if (photo.displayUrl) return Promise.resolve(photo.displayUrl);
+    if (photo.heicJob) return photo.heicJob;
+    const job = heicQueue.then(async () => {
+      const lib = await loadHeic2any();
+      const out = await lib({ blob: photo.file, toType: 'image/jpeg', quality: 0.8 });
+      const blob = Array.isArray(out) ? out[0] : out;
+      photo.displayUrl = URL.createObjectURL(blob);
+      return photo.displayUrl;
+    });
+    heicQueue = job.catch(() => {});
+    photo.heicJob = job;
+    return job;
   }
 
   // ---------- Date & folder filtering ----------
@@ -1208,13 +1485,19 @@
     }
     dateFilterSection.hidden = !showDateFilter;
 
+    activeLocKey = null;
+    const estCount = allPhotos.filter((p) => p.estimated).length;
+    const showLocFilter = estCount > 0;
+    if (showLocFilter) renderLocChips();
+    locFilterSection.hidden = !showLocFilter;
+
     distinctFolders = computeDistinctFolders(allPhotos);
     activeFolderKey = null;
     const showFolderFilter = distinctFolders.length > 1;
     if (showFolderFilter) renderFolderChips();
     folderFilterSection.hidden = !showFolderFilter;
 
-    filtersPanelEl.hidden = !(showDateFilter || showFolderFilter);
+    filtersPanelEl.hidden = !(showDateFilter || showFolderFilter || showLocFilter);
   }
 
   function renderDateChips() {
@@ -1273,6 +1556,47 @@
     return `${fromLabel} to ${toLabel}`;
   }
 
+  const LOC_CHIPS = [
+    { key: null, label: 'All' },
+    { key: 'gps', label: 'Recorded GPS' },
+    { key: 'est', label: 'Estimated' },
+    { key: 'none', label: 'No location' },
+  ];
+
+  function locCount(key) {
+    return allPhotos.filter((p) => (key === 'gps' ? p.hasGPS : key === 'est' ? p.estimated : !hasLocation(p))).length;
+  }
+
+  function renderLocChips() {
+    locChipRow.innerHTML = '';
+    LOC_CHIPS.forEach((c) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'date-chip' + (c.key === 'est' ? ' loc-chip-est' : '');
+      if (c.key !== null) chip.dataset.key = c.key;
+      chip.textContent = c.key === null ? c.label : `${c.label} (${locCount(c.key)})`;
+      chip.addEventListener('click', () => selectLocKey(c.key));
+      locChipRow.appendChild(chip);
+    });
+    highlightLocChips();
+  }
+
+  function highlightLocChips() {
+    locChipRow.querySelectorAll('.date-chip').forEach((chip) => {
+      const hasKey = chip.dataset.key !== undefined;
+      chip.classList.toggle('active', hasKey ? chip.dataset.key === activeLocKey : activeLocKey === null);
+    });
+  }
+
+  function selectLocKey(key) {
+    activeLocKey = key;
+    applyFilters();
+  }
+
+  function locLabel(key) {
+    return (LOC_CHIPS.find((c) => c.key === key) || {}).label || '';
+  }
+
   function folderChipLabel(key) {
     return key === '' ? 'Root' : key;
   }
@@ -1323,14 +1647,19 @@
       if (activeFromKey && dayKey(p.timestamp) < activeFromKey) return false;
       if (activeToKey && dayKey(p.timestamp) > activeToKey) return false;
       if (activeFolderKey !== null && p.folderKey !== activeFolderKey) return false;
+      if (activeLocKey === 'gps' && !p.hasGPS) return false;
+      if (activeLocKey === 'est' && !p.estimated) return false;
+      if (activeLocKey === 'none' && hasLocation(p)) return false;
       return true;
     });
 
-    waypoints = visiblePhotos.filter((p) => p.hasGPS);
-    noGpsPhotos = visiblePhotos.filter((p) => !p.hasGPS);
+    waypoints = visiblePhotos.filter(hasLocation);
+    noGpsPhotos = visiblePhotos.filter((p) => !hasLocation(p));
 
     highlightChips();
     highlightFolderChips();
+    highlightLocChips();
+    locFilterClear.hidden = activeLocKey === null;
     dateFilterClear.hidden = !(activeFromKey || activeToKey);
     folderFilterClear.hidden = activeFolderKey === null;
 
@@ -1356,7 +1685,7 @@
       return;
     }
     if (visiblePhotos.length === 0) {
-      setEmptyStateCopy('No matches for this filter', 'Nothing was captured in that date range or folder. Try a wider selection or clear the filters above.');
+      setEmptyStateCopy('No matches for this filter', 'Nothing matches that date range, folder or location source. Try a wider selection or clear the filters above.');
       emptyState.style.display = 'flex';
       return;
     }
@@ -1377,7 +1706,7 @@
       if (noGpsPhotos.length === allPhotos.length) {
         const note = document.createElement('p');
         note.style.cssText = 'font-size:11px;color:var(--ink-soft);padding:0 10px 10px;line-height:1.5;';
-        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, cloud download, or a phone\'s Photos/Gallery picker, rather than something this app can recover. On iPhone, try Browse instead of Photo Library; on Android, try Files instead of Photos.';
+        note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, cloud download, or a phone\'s Photos/Gallery picker, rather than something this app can recover. On iPhone, try Browse instead of Photo Library; on Android, try Files instead of Photos. Insta360 cameras only store GPS when a GPS source was active while recording.';
         listScroll.appendChild(note);
       }
       noGpsPhotos.forEach((p) => listScroll.appendChild(buildRow(p, null)));
@@ -1390,16 +1719,21 @@
     row.tabIndex = 0;
 
     const badge = document.createElement('div');
-    badge.className = 'row-badge' + (order ? '' : ' no-gps');
+    badge.className = 'row-badge' + (order ? (photo.estimated ? ' est' : '') : ' no-gps');
+    if (photo.estimated) badge.title = 'Estimated location';
     badge.textContent = order ? order : '-';
 
     const thumbWrap = document.createElement('div');
     thumbWrap.className = 'row-thumb-wrap';
     const thumb = document.createElement('img');
     thumb.className = 'row-thumb';
-    thumb.src = photo.thumbUrl || photo.url;
+    thumb.src = photo.displayUrl || photo.thumbUrl || photo.url;
     thumb.loading = 'lazy';
-    thumb.onerror = () => { thumb.replaceWith(makeBrokenThumb()); };
+    thumb.onerror = () => {
+      if (!canConvertHeic(photo)) { thumb.replaceWith(makeBrokenThumb()); return; }
+      thumb.onerror = () => { thumb.replaceWith(makeBrokenThumb()); };
+      convertHeic(photo).then((u) => { thumb.src = u; }).catch(() => { thumb.replaceWith(makeBrokenThumb()); });
+    };
     thumbWrap.appendChild(thumb);
     if (photo.isVideo) {
       thumbWrap.insertAdjacentHTML('beforeend', '<div class="play-badge-sm"><svg width="7" height="8" viewBox="0 0 7 8" fill="#EDE6D6"><path d="M0 0 L7 4 L0 8 Z"/></svg></div>');
@@ -1415,7 +1749,8 @@
     const dt = formatDateTime(photo.timestamp);
     const durLabel = photo.isVideo && photo.duration ? ` · ${formatDuration(photo.duration)}` : '';
     const approxPrefix = photo.approxTime ? '~' : '';
-    timeEl.textContent = `${approxPrefix}${dt.date}${dt.time ? ' · ' + dt.time : ''}${durLabel}`;
+    const estTag = photo.estimated ? ' · est. location' : '';
+    timeEl.textContent = `${approxPrefix}${dt.date}${dt.time ? ' · ' + dt.time : ''}${durLabel}${estTag}`;
     meta.appendChild(nameEl);
     meta.appendChild(timeEl);
 
@@ -1424,7 +1759,7 @@
     row.appendChild(meta);
 
     const activate = () => {
-      if (photo.hasGPS && photo.marker) focusMarker(photo);
+      if (hasLocation(photo) && photo.marker) focusMarker(photo);
       else openLightbox(photo.id);
     };
     row.addEventListener('click', activate);
@@ -1461,6 +1796,9 @@
       `<span class="mono">${waypoints.length}</span> waypoint${waypoints.length === 1 ? '' : 's'}`,
     ];
     if (distanceLabel) parts.push(`<span class="mono">${distanceLabel}</span>`);
+    const estVisible = visiblePhotos.filter((p) => p.estimated).length;
+    if (estVisible) parts.push(`<span class="mono">${estVisible}</span> estimated`);
+    if (activeLocKey !== null) parts.push(locLabel(activeLocKey));
     if (activeFromKey || activeToKey) parts.push(dateRangeLabel());
     if (activeFolderKey !== null) parts.push(escapeHtml(folderChipLabel(activeFolderKey)));
     statsLine.innerHTML = parts.join(' · ');
@@ -1489,13 +1827,14 @@
   }
 
   function waypointIcon(kind, number, isVideo) {
-    const cls = kind === 'start' ? 'start' : kind === 'end' ? 'end' : '';
+    const cls = kind === 'start' ? 'start' : kind === 'end' ? 'end' : kind === 'est' ? 'est' : '';
+    const big = cls === 'start' || cls === 'end';
     const dot = isVideo ? '<div class="video-dot"></div>' : '';
     return L.divIcon({
       className: '',
       html: `<div class="waypoint-icon ${cls}"><span>${kind === 'start' ? 'S' : kind === 'end' ? 'F' : number}</span>${dot}</div>`,
-      iconSize: cls ? [30, 30] : [26, 26],
-      iconAnchor: cls ? [15, 30] : [13, 26],
+      iconSize: big ? [30, 30] : [26, 26],
+      iconAnchor: big ? [15, 30] : [13, 26],
       popupAnchor: [0, -26],
     });
   }
@@ -1526,7 +1865,7 @@
     layerGroup.clearLayers();
 
     if (waypoints.length === 0) {
-      mapEmptyNote.textContent = (activeFromKey || activeToKey || activeFolderKey !== null)
+      mapEmptyNote.textContent = (activeFromKey || activeToKey || activeFolderKey !== null || activeLocKey !== null)
         ? 'None of the currently filtered photos carry location data.'
         : 'None of these files carry location data.';
       mapEmptyNote.style.display = visiblePhotos.length ? 'block' : 'none';
@@ -1557,7 +1896,7 @@
 
     waypoints.forEach((photo, idx) => {
       const kind = idx === 0 ? 'start' : (idx === waypoints.length - 1 && waypoints.length > 1) ? 'end' : 'mid';
-      const marker = L.marker([photo.lat, photo.lon], { icon: waypointIcon(kind, idx + 1, photo.isVideo) });
+      const marker = L.marker([photo.lat, photo.lon], { icon: waypointIcon(photo.estimated ? 'est' : kind, idx + 1, photo.isVideo) });
       marker.bindPopup(buildPopupHTML(photo, idx + 1), { closeButton: true, maxWidth: 260 });
       marker.on('popupopen', () => {
         const wrap = document.getElementById(`popup-thumb-${photo.id}`);
@@ -1570,9 +1909,14 @@
         }
         const img = document.querySelector(`#popup-thumb-${photo.id} img`);
         if (img) {
-          img.onerror = () => {
+          const showFallback = () => {
             const w = document.getElementById(`popup-thumb-${photo.id}`);
             if (w) w.innerHTML = '<div class="popup-thumb-fallback">Preview unavailable for this format<br>Metadata still shown below.</div>';
+          };
+          img.onerror = () => {
+            if (!canConvertHeic(photo)) { showFallback(); return; }
+            img.onerror = showFallback;
+            convertHeic(photo).then((u) => { img.src = u; }).catch(showFallback);
           };
         }
         const prevBtn = document.getElementById(`popup-prev-${photo.id}`);
@@ -1612,19 +1956,20 @@
     return `
       <div class="popup-card">
         <div class="popup-thumb-wrap" id="popup-thumb-${photo.id}">
-          <img src="${photo.thumbUrl || photo.url}" alt="${escapeHtml(photo.name)}" />
+          <img src="${photo.displayUrl || photo.thumbUrl || photo.url}" alt="${escapeHtml(photo.name)}" />
           ${playBadge}
           ${durationBadge}
           <div class="popup-zoom-hint">${photo.isVideo ? 'Play video' : 'View full photo'}</div>
         </div>
         <div class="popup-body">
           ${orderLine}
+          ${photo.estimated ? `<div class="est-banner">Estimated location</div><p class="est-note">${escapeHtml(estimateNote(photo))}</p>` : ''}
           <p class="popup-date display">${photo.approxTime ? '~' : ''}${dt.date}${dt.time ? ' · ' + dt.time : ''}</p>
           <div class="popup-row"><span class="k">Size</span><span class="v">${formatBytes(photo.size)}</span></div>
           <div class="popup-row"><span class="k">Dimensions</span><span class="v">${dims}</span></div>
           ${durationRow}
           ${photo.camera ? `<div class="popup-row"><span class="k">Camera</span><span class="v">${escapeHtml(photo.camera)}</span></div>` : ''}
-          <div class="popup-row"><span class="k">Coordinates</span><span class="v">${formatCoord(photo.lat, photo.lon)}</span></div>
+          <div class="popup-row"><span class="k">Coordinates</span><span class="v">${photo.estimated ? '~' : ''}${formatCoord(photo.lat, photo.lon)}</span></div>
         </div>
       </div>
     `;
@@ -1722,11 +2067,13 @@
       lightboxVideo.style.display = 'none';
       lightboxVideo.src = '';
       lightboxImg.style.display = 'block';
-      lightboxImg.src = photo.url;
+      lightboxImg.src = photo.displayUrl || photo.url;
       lightboxImg.alt = photo.name;
     }
     const dt = formatDateTime(photo.timestamp);
-    const loc = photo.hasGPS ? ` · <span class="mono">${formatCoord(photo.lat, photo.lon)}</span>` : '';
+    const loc = hasLocation(photo)
+      ? ` · <span class="mono">${photo.estimated ? '~' : ''}${formatCoord(photo.lat, photo.lon)}</span>${photo.estimated ? ' (estimated)' : ''}`
+      : '';
     lightboxCaption.innerHTML = `${escapeHtml(photo.name)} · ${dt.date}${dt.time ? ' ' + dt.time : ''}${loc}`;
   }
 
@@ -1746,6 +2093,14 @@
   lightboxClose.addEventListener('click', closeLightbox);
   lightboxPrev.addEventListener('click', () => stepLightbox(-1));
   lightboxNext.addEventListener('click', () => stepLightbox(1));
+  lightboxImg.addEventListener('error', () => {
+    const photo = visiblePhotos[lightboxIndex];
+    if (!lightbox.classList.contains('active') || !lightboxImg.getAttribute('src')) return;
+    if (!canConvertHeic(photo) || photo.displayUrl === lightboxImg.getAttribute('src')) return;
+    convertHeic(photo).then((u) => {
+      if (visiblePhotos[lightboxIndex] === photo) lightboxImg.src = u;
+    }).catch(() => {});
+  });
   lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
   attachSwipeNav(lightboxMediaWrap, (dir) => {
     const photo = visiblePhotos[lightboxIndex];
