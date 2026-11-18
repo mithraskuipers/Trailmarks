@@ -2,410 +2,265 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Trailmarks · Photo & Video Trail Mapper</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Trailmarks" />
+<title>Trailmarks · Photo &amp; Video Trail Mapper</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%235AC8FA'/%3E%3Cstop offset='1' stop-color='%23007AFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9.5' fill='url(%23g)'/%3E%3Cpath d='M20 9 L25 20 L20 31 L15 20 Z' fill='white'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
-  :root{
-    --paper: #EDE6D6;
-    --paper-dark: #DED2B8;
-    --paper-darker: #CFC1A0;
-    --ink: #23291F;
-    --ink-soft: #565E4C;
-    --trail: #C4501F;
-    --trail-dark: #9C3E17;
-    --contour: #5C7A5C;
-    --sky: #3C5A73;
-    --shadow: rgba(35,41,31,0.18);
-    --radius: 10px;
+  :root {
+    color-scheme: light dark;
+    --accent: #007AFF;
+    --accent-hover: #0A84FF;
+    --accent-press: #0062CC;
+    --accent-tint: rgba(0, 122, 255, 0.14);
+    --green: #34C759;
+    --orange: #FF9500;
+    --orange-tint: rgba(255, 149, 0, 0.16);
+    --red: #FF3B30;
+    --indigo: #5856D6;
+    --bg: #F2F2F7;
+    --label: #1C1C1E;
+    --label2: rgba(60, 60, 67, 0.64);
+    --label3: rgba(60, 60, 67, 0.3);
+    --fill: rgba(120, 120, 128, 0.12);
+    --fill2: rgba(120, 120, 128, 0.2);
+    --sep: rgba(60, 60, 67, 0.14);
+    --hairline: rgba(0, 0, 0, 0.08);
+    --glass: rgba(246, 246, 250, 0.74);
+    --glass-strong: rgba(252, 252, 254, 0.88);
+    --card: rgba(255, 255, 255, 0.72);
+    --blur: saturate(180%) blur(30px);
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.08);
+    --ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
   }
 
-  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #0A84FF;
+      --accent-hover: #409CFF;
+      --accent-press: #0071E3;
+      --accent-tint: rgba(10, 132, 255, 0.22);
+      --green: #30D158;
+      --orange: #FF9F0A;
+      --orange-tint: rgba(255, 159, 10, 0.22);
+      --red: #FF453A;
+      --indigo: #5E5CE6;
+      --bg: #000000;
+      --label: #FFFFFF;
+      --label2: rgba(235, 235, 245, 0.64);
+      --label3: rgba(235, 235, 245, 0.3);
+      --fill: rgba(120, 120, 128, 0.24);
+      --fill2: rgba(120, 120, 128, 0.36);
+      --sep: rgba(84, 84, 88, 0.55);
+      --hairline: rgba(255, 255, 255, 0.1);
+      --glass: rgba(28, 28, 30, 0.7);
+      --glass-strong: rgba(44, 44, 46, 0.86);
+      --card: rgba(118, 118, 128, 0.2);
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.35);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
   html, body {
     margin: 0;
     height: 100%;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'Inter', system-ui, sans-serif;
-    font-size: 14px;
+    background: var(--bg);
+    color: var(--label);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.3;
+    letter-spacing: -0.011em;
     overflow: hidden;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--trail);
-    outline-offset: 2px;
-  }
-
-  .display { font-family: 'Fraunces', Georgia, serif; }
-  .mono { font-family: 'JetBrains Mono', 'SF Mono', monospace; }
-
-  #app { display: flex; height: 100vh; width: 100vw; }
-
-  /* ---------- Sidebar ---------- */
-
-  #sidebar {
-    width: 380px;
-    min-width: 380px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: var(--paper);
-    border-right: 1px solid var(--paper-darker);
-    z-index: 10;
-  }
-
-  #sidebar-header { padding: 22px 22px 16px; border-bottom: 1px solid var(--paper-darker); }
-
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand-mark { flex-shrink: 0; }
-  .brand h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: 0.2px; }
-  .brand-sub {
-    margin: 2px 0 0;
-    font-size: 12px;
-    color: var(--ink-soft);
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-  }
-
-  #stats-line { margin-top: 14px; font-size: 12.5px; color: var(--ink-soft); min-height: 16px; }
-  #stats-line .mono { color: var(--trail-dark); }
-
-  #controls { padding: 14px 22px; border-bottom: 1px solid var(--paper-darker); }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--ink);
-    color: var(--paper);
-    border: none;
-    border-radius: var(--radius);
-    padding: 12px 18px;
-    min-height: 44px;
-    font-family: 'Inter', sans-serif;
-    font-size: 13.5px;
-    font-weight: 500;
-    cursor: pointer;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.12s ease, background 0.12s ease;
-  }
-  .btn:hover { background: var(--trail-dark); }
-  .btn:active { transform: scale(0.97); }
-
-  #folder-input { display: none; }
-
-  #progress-wrap { display: none; margin-top: 12px; }
-  #progress-wrap.active { display: block; }
-  #progress-track { height: 4px; background: var(--paper-darker); border-radius: 2px; overflow: hidden; }
-  #progress-fill { height: 100%; width: 0%; background: var(--trail); transition: width 0.15s ease; }
-  #progress-text { margin-top: 6px; font-size: 11.5px; color: var(--ink-soft); }
-
-  /* ---------- Folder settings ---------- */
-
-  #settings-panel { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
-  #settings-panel[hidden], #settings-body[hidden] { display: none; }
-  .settings-status { font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
-  .settings-status.dirty { color: var(--trail-dark); }
-  #settings-body { margin-top: 10px; }
-  .set-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin: 6px 0; }
-  .set-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; margin: 6px 0; }
-  .set-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .set-field input[type="number"] {
-    width: 88px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--paper-darker);
-    border-radius: 8px;
-    padding: 6px 8px;
-    min-height: 34px;
-  }
-  .set-field input[disabled] { opacity: 0.55; }
-  .set-subtitle { margin-top: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); }
-  #set-offsets { max-height: 200px; overflow-y: auto; }
-  .set-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
-  .btn.small { padding: 8px 14px; min-height: 36px; font-size: 12.5px; }
-
-  /* ---------- Date filter ---------- */
-
-  #filters-panel { padding: 12px 22px 14px; border-bottom: 1px solid var(--paper-darker); }
-  #filters-panel[hidden] { display: none; }
-
-  .filter-section[hidden] { display: none; }
-  .filter-section + .filter-section {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px dashed var(--paper-darker);
   }
 
-  .date-filter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-  .date-filter-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--ink-soft);
-    flex: 1;
-  }
-  .date-filter-link {
-    background: none;
-    border: none;
-    padding: 4px 0;
-    font-family: 'Inter', sans-serif;
-    font-size: 11.5px;
-    font-weight: 500;
-    color: var(--trail-dark);
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .date-filter-link[hidden] { display: none; }
-  .date-filter-link:hover { text-decoration: underline; }
+  button, input { font: inherit; color: inherit; letter-spacing: inherit; }
+  button { cursor: pointer; }
 
-  .date-chip-row {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 3px;
-  }
-  .date-chip-row::-webkit-scrollbar { height: 5px; }
-  .date-chip-row::-webkit-scrollbar-thumb { background: var(--paper-darker); border-radius: 3px; }
+  :focus-visible { outline: 3px solid var(--accent-tint); outline-offset: 1px; box-shadow: 0 0 0 1.5px var(--accent); }
 
-  .date-chip {
-    flex-shrink: 0;
-    white-space: nowrap;
-    background: var(--paper-dark);
-    border: 1px solid var(--paper-darker);
-    color: var(--ink);
-    border-radius: 20px;
-    padding: 8px 14px;
-    min-height: 34px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
-  }
-  .date-chip:hover { background: var(--paper-darker); }
-  .date-chip.active { background: var(--trail); border-color: var(--trail); color: var(--paper); }
+  .display { font-family: var(--font); }
+  .mono { font-variant-numeric: tabular-nums; }
 
-  /* Folder chips share the pill look but get their own accent (sky blue,
-     already used for the map's end-marker) so the two filter dimensions
-     stay visually distinct, and truncate long nested paths with ellipsis. */
-  .folder-chip { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
-  .folder-chip.active { background: var(--sky); border-color: var(--sky); color: var(--paper); }
-
-  .date-range-row { display: flex; gap: 10px; margin-top: 10px; }
-  .date-range-row[hidden] { display: none; }
-  .date-range-field {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 10.5px;
-    color: var(--ink-soft);
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-  }
-  .date-range-field input[type="date"] {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    color: var(--ink);
-    background: var(--paper);
-    border: 1px solid var(--paper-darker);
-    border-radius: 8px;
-    padding: 8px 10px;
-    min-height: 38px;
-    text-transform: none;
-    letter-spacing: normal;
-    width: 100%;
-  }
-
-  /* ---------- Photo list ---------- */
-
-  #list-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px 24px; }
-
-  .list-section-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--ink-soft);
-    padding: 14px 10px 6px;
-  }
-
-  .photo-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.12s ease;
-  }
-  .photo-row:hover { background: var(--paper-dark); }
-  .photo-row.active { background: var(--paper-darker); box-shadow: inset 3px 0 0 var(--trail); }
-
-  .row-badge {
-    flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--trail);
-    color: var(--paper);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .row-badge.no-gps { background: transparent; border: 1px solid var(--paper-darker); color: var(--ink-soft); }
-  .row-badge.est { background: transparent; border: 1px dashed var(--trail); color: var(--trail-dark); }
-  .loc-chip-est { border-style: dashed; border-color: var(--trail); }
-
-  .row-thumb-wrap { flex-shrink: 0; width: 46px; height: 46px; position: relative; }
-  .row-thumb {
-    width: 100%;
-    height: 100%;
-    border-radius: 6px;
-    object-fit: cover;
-    background: var(--paper-dark);
-    border: 1px solid var(--paper-darker);
-    display: block;
-  }
-  .row-thumb.broken {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink-soft);
-    font-size: 9px;
-    text-align: center;
-    padding: 2px;
-  }
-  .play-badge-sm {
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    background: rgba(35,41,31,0.75);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .play-badge-sm svg { margin-left: 1px; }
-
-  .row-meta { min-width: 0; flex: 1; }
-  .row-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row-time { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
-
-  /* ---------- Empty state ---------- */
-
-  #empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 40px 30px;
-    color: var(--ink-soft);
-  }
-  #empty-state svg { margin-bottom: 14px; opacity: 0.55; }
-  #empty-state h2 { font-size: 18px; color: var(--ink); margin: 0 0 8px; font-weight: 600; }
-  #empty-state p { font-size: 12.5px; line-height: 1.6; max-width: 260px; margin: 0; }
+  #app { position: fixed; inset: 0; }
 
   /* ---------- Map ---------- */
 
-  #map-container { flex: 1; position: relative; height: 100%; }
-  #map { width: 100%; height: 100%; background: var(--paper-dark); }
+  #map-container { position: absolute; inset: 0; z-index: 0; isolation: isolate; }
+  #map { width: 100%; height: 100%; background: var(--bg); }
 
   #map-empty-note {
     position: absolute;
-    top: 20px;
+    top: calc(var(--safe-top) + 16px);
     left: 50%;
     transform: translateX(-50%);
-    background: var(--ink);
-    color: var(--paper);
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 12.5px;
-    box-shadow: 0 4px 12px var(--shadow);
+    max-width: calc(100% - 96px);
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    color: var(--label);
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    box-shadow: var(--shadow), inset 0 0 0 0.5px var(--hairline);
     display: none;
     z-index: 500;
   }
 
+  @media (prefers-color-scheme: dark) {
+    .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.75); }
+    .leaflet-control-layers-toggle { filter: invert(1); }
+  }
+
+  .leaflet-top { top: var(--safe-top); }
+  .leaflet-right { right: var(--safe-right); }
+  .leaflet-bottom { bottom: var(--safe-bottom); }
+  .leaflet-top .leaflet-control { margin-top: 12px; }
+  .leaflet-right .leaflet-control { margin-right: 12px; }
+
+  .leaflet-bar, .leaflet-touch .leaflet-bar, .leaflet-control-layers {
+    border: none !important;
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--glass) !important;
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    box-shadow: var(--shadow), inset 0 0 0 0.5px var(--hairline) !important;
+  }
+  .leaflet-touch .leaflet-bar a, .leaflet-bar a {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+    background: transparent;
+    color: var(--label);
+    border-bottom: 0.5px solid var(--sep);
+    font-size: 22px;
+    transition: background 0.2s var(--ease);
+  }
+  .leaflet-bar a:last-child { border-bottom: none; }
+  .leaflet-bar a:hover, .leaflet-bar a:active { background: var(--fill); color: var(--label); }
+  .leaflet-bar a.leaflet-disabled { opacity: 0.35; }
+  .fit-btn { display: flex !important; align-items: center; justify-content: center; }
+  .fit-btn svg { width: 20px; height: 20px; }
+
+  .leaflet-control-layers-toggle { width: 44px; height: 44px; background-size: 24px 24px; }
+  .leaflet-control-layers-expanded { padding: 10px 14px; color: var(--label); font-size: 15px; }
+  .leaflet-control-layers label { font-size: 15px; padding: 3px 0; }
+  .leaflet-control-layers-separator { border-top: 0.5px solid var(--sep); }
+
+  .leaflet-control-attribution {
+    background: var(--glass) !important;
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    color: var(--label2) !important;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px 0 0 0;
+  }
+  .leaflet-control-attribution a { color: var(--accent) !important; }
+
+  /* Pins */
   .waypoint-icon {
     width: 26px;
     height: 26px;
     border-radius: 50% 50% 50% 0;
-    background: var(--trail);
-    border: 2px solid var(--paper);
+    background: var(--accent);
+    border: 2.5px solid #fff;
     transform: rotate(-45deg);
-    box-shadow: 0 2px 6px var(--shadow);
+    box-shadow: 0 3px 9px rgba(0, 0, 0, 0.32);
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
+    transition: transform 0.3s var(--ease);
   }
-  .waypoint-icon span { transform: rotate(45deg); color: var(--paper); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500; }
-  .waypoint-icon.est { background: var(--paper); border: 2px dashed var(--trail); box-shadow: 0 2px 6px var(--shadow); }
-  .waypoint-icon.est span { color: var(--trail-dark); }
-  .waypoint-icon.start { background: var(--contour); width: 30px; height: 30px; }
-  .waypoint-icon.end { background: var(--sky); width: 30px; height: 30px; }
+  .waypoint-icon span { transform: rotate(45deg); color: #fff; font-size: 11px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+  .waypoint-icon.start { background: var(--green); width: 30px; height: 30px; }
+  .waypoint-icon.end { background: var(--red); width: 30px; height: 30px; }
+  .waypoint-icon.est { background: #fff; border: 2px dashed var(--orange); box-shadow: 0 3px 9px rgba(0, 0, 0, 0.25); }
+  .waypoint-icon.est span { color: #B45F00; }
   .waypoint-icon .video-dot {
     position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 9px;
-    height: 9px;
+    top: -4px;
+    right: -4px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
-    background: var(--sky);
-    border: 1.5px solid var(--paper);
+    background: #AF52DE;
+    border: 2px solid #fff;
     transform: rotate(45deg);
   }
+  @media (hover: hover) { .leaflet-marker-icon:hover .waypoint-icon { transform: rotate(-45deg) scale(1.1); } }
 
   .trail-arrow {
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-bottom: 9px solid var(--trail);
-    filter: drop-shadow(0 1px 1px var(--shadow));
+    border-bottom: 9px solid #fff;
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
   }
 
-  @keyframes trail-flow { to { stroke-dashoffset: -12; } }
-  .trail-path { animation: trail-flow 1.4s linear infinite; }
-
-  .leaflet-popup-content-wrapper { background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); }
-  .leaflet-popup-tip { background: var(--paper); }
-  .leaflet-popup-content { margin: 0; width: 240px !important; }
-
-  .leaflet-control-layers { background: var(--paper); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); border: none; font-family: inherit; }
-  .leaflet-control-layers-toggle { border-radius: var(--radius); }
-  .leaflet-control-layers label { color: var(--ink); font-size: 12.5px; }
-  .leaflet-control-layers-separator { border-top: 1px solid var(--paper-darker); }
+  /* Popup */
+  .leaflet-popup-content-wrapper {
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    color: var(--label);
+    border-radius: 20px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: var(--shadow), inset 0 0 0 0.5px var(--hairline);
+    animation: pop-in 0.34s var(--ease);
+    transform-origin: 50% 100%;
+  }
+  .leaflet-popup-tip { background: var(--glass-strong); box-shadow: none; }
+  .leaflet-popup-content { margin: 0 !important; width: 248px !important; font-family: var(--font); font-size: 15px; line-height: 1.3; }
+  .leaflet-container a.leaflet-popup-close-button {
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.42);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font: 400 19px/28px var(--font);
+    text-align: center;
+    z-index: 5;
+  }
+  .leaflet-container a.leaflet-popup-close-button:hover { color: #fff; background: rgba(0, 0, 0, 0.6); }
+  @keyframes pop-in { from { transform: scale(0.9); opacity: 0; } }
 
   .popup-thumb-wrap {
     width: 100%;
-    height: 150px;
+    height: 164px;
     overflow: hidden;
-    border-radius: var(--radius) var(--radius) 0 0;
     cursor: zoom-in;
-    background: var(--paper-dark);
+    background: var(--fill);
     position: relative;
     touch-action: pan-y;
-    -webkit-tap-highlight-color: transparent;
   }
   .popup-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .popup-thumb-fallback {
@@ -416,262 +271,623 @@
     justify-content: center;
     flex-direction: column;
     gap: 4px;
-    color: var(--ink-soft);
-    font-size: 10.5px;
+    color: var(--label2);
+    font-size: 12px;
     text-align: center;
-    padding: 10px;
+    padding: 12px;
   }
-  .popup-zoom-hint {
+  .popup-zoom-hint, .duration-badge {
     position: absolute;
-    bottom: 6px;
-    right: 8px;
-    background: rgba(35,41,31,0.65);
-    color: var(--paper);
-    font-size: 9.5px;
-    padding: 2px 7px;
-    border-radius: 10px;
-    letter-spacing: 0.3px;
+    bottom: 10px;
+    background: rgba(0, 0, 0, 0.45);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 999px;
   }
+  .popup-zoom-hint { right: 10px; }
+  .duration-badge { left: 10px; font-variant-numeric: tabular-nums; }
   .play-badge-lg {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
-    background: rgba(35,41,31,0.6);
+    background: rgba(0, 0, 0, 0.4);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .duration-badge {
-    position: absolute;
-    bottom: 6px;
-    left: 8px;
-    background: rgba(35,41,31,0.65);
-    color: var(--paper);
-    font-size: 9.5px;
-    font-family: 'JetBrains Mono', monospace;
-    padding: 2px 7px;
-    border-radius: 10px;
-  }
-  .popup-body { padding: 12px 14px 14px; }
-  .popup-nav { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 0 6px; }
+  .play-badge-lg svg { margin-left: 3px; }
+  .popup-body { padding: 12px 16px 16px; }
+  .popup-nav { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 0 8px; }
   .popup-nav-btn {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    border: 1px solid var(--paper-darker);
-    background: var(--paper);
-    color: var(--ink);
-    font-size: 17px;
+    border: none;
+    background: var(--fill);
+    color: var(--accent);
+    font-size: 20px;
     line-height: 1;
-    padding: 0;
+    padding: 0 0 2px;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.12s ease;
+    transition: transform 0.2s var(--ease), background 0.2s;
   }
-  .popup-nav-btn:hover { background: var(--paper-dark); }
-  .popup-nav-btn:active { background: var(--paper-darker); transform: scale(0.94); }
-  .popup-order { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--trail-dark); margin: 0 0 4px; font-weight: 500; }
+  .popup-nav-btn:active { transform: scale(0.88); background: var(--fill2); }
+  .popup-order { font-size: 13px; font-weight: 600; color: var(--label2); margin: 0 0 4px; }
   .popup-nav .popup-order { margin: 0; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .popup-date { font-family: 'Fraunces', serif; font-size: 15px; margin: 0 0 8px; }
-  .est-banner { display: inline-block; margin: 0 0 6px; padding: 2px 9px; border: 1px dashed var(--trail); border-radius: 10px; font-size: 10.5px; color: var(--trail-dark); letter-spacing: 0.3px; }
-  .est-note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--ink-soft); }
-  .popup-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-top: 1px dashed var(--paper-darker); }
+  .popup-date { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .popup-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 7px 0; border-top: 0.5px solid var(--sep); }
   .popup-row:first-of-type { border-top: none; }
-  .popup-row .k { color: var(--ink-soft); }
-  .popup-row .v { font-family: 'JetBrains Mono', monospace; text-align: right; }
+  .popup-row .k { color: var(--label2); }
+  .popup-row .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .est-banner { display: inline-block; margin: 0 0 6px; padding: 3px 10px; border-radius: 999px; background: var(--orange-tint); color: #B45F00; font-size: 12px; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .est-banner { color: var(--orange); } }
+  .est-note { margin: 0 0 10px; font-size: 13px; line-height: 1.4; color: var(--label2); }
+
+  /* ---------- Panel / sheet ---------- */
+
+  #sidebar {
+    position: absolute;
+    z-index: 20;
+    top: calc(var(--safe-top) + 12px);
+    left: calc(var(--safe-left) + 12px);
+    bottom: 12px;
+    width: 388px;
+    display: flex;
+    flex-direction: column;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    border-radius: 28px;
+    box-shadow: var(--shadow), inset 0 0 0 0.5px var(--hairline);
+    overflow: hidden;
+  }
+
+  #sheet-handle { flex: none; }
+  #grabber { display: none; }
+
+  #sidebar-header { padding: 20px 20px 10px; }
+  .brand { display: flex; align-items: center; gap: 13px; }
+  .brand-mark { width: 46px; height: 46px; flex-shrink: 0; border-radius: 11px; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35); }
+  .brand h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
+  .brand-sub { margin: 2px 0 0; font-size: 13px; color: var(--label2); }
+  #stats-line { margin-top: 12px; font-size: 13px; color: var(--label2); min-height: 18px; line-height: 1.45; }
+  #stats-line .mono { color: var(--label); font-weight: 600; }
+
+  #controls { padding: 4px 20px 14px; }
+
+  .btn {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 15px;
+    padding: 0 18px;
+    min-height: 50px;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.014em;
+    transition: transform 0.25s var(--ease), background 0.2s, color 0.2s;
+  }
+  .btn:active { transform: scale(0.97); background: var(--accent-press); }
+  @media (hover: hover) { .btn:hover { background: var(--accent-hover); } }
+  .btn.tinted { background: var(--accent-tint); color: var(--accent); min-height: 44px; font-size: 16px; }
+  .btn.tinted:active { background: var(--fill2); }
+  @media (hover: hover) { .btn.tinted:hover { background: var(--fill2); } }
+  .btn.small { width: auto; min-height: 40px; padding: 0 20px; font-size: 15px; border-radius: 12px; }
+  .btn svg { flex-shrink: 0; }
+  #folder-input { display: none; }
+
+  #progress-wrap { display: none; margin-top: 14px; }
+  #progress-wrap.active { display: block; animation: fade-in 0.3s var(--ease); }
+  #progress-track { height: 5px; background: var(--fill2); border-radius: 3px; overflow: hidden; }
+  #progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.2s var(--ease); }
+  #progress-text { margin-top: 7px; font-size: 12px; color: var(--label2); }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(-4px); } }
+
+  #sheet-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 12px;
+    border-top: 0.5px solid var(--sep);
+  }
+  #sheet-scroll::-webkit-scrollbar { width: 0; }
+
+  /* Settings and filters */
+  #settings-panel, #filters-panel { padding: 10px 20px 2px; }
+  #settings-panel[hidden], #filters-panel[hidden], #settings-body[hidden] { display: none; }
+  #settings-body:not([hidden]) { animation: fade-in 0.35s var(--ease); }
+
+  .date-filter-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; min-height: 24px; }
+  .date-filter-title { font-size: 13px; font-weight: 600; color: var(--label2); flex: 1; }
+  .date-filter-link {
+    background: none;
+    border: none;
+    padding: 6px 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--accent);
+    transition: opacity 0.2s;
+  }
+  .date-filter-link[hidden] { display: none; }
+  .date-filter-link:active { opacity: 0.45; }
+
+  .filter-section[hidden] { display: none; }
+  .filter-section + .filter-section { margin-top: 10px; }
+
+  .date-chip-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    margin: 0 -20px;
+    padding: 2px 20px 4px;
+    scroll-padding: 0 20px;
+  }
+  .date-chip-row::-webkit-scrollbar { height: 0; }
+
+  .date-chip {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    white-space: nowrap;
+    background: var(--fill);
+    border: none;
+    color: var(--label);
+    border-radius: 999px;
+    padding: 0 15px;
+    min-height: 36px;
+    font-size: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    transition: background 0.25s var(--ease), color 0.25s var(--ease), transform 0.2s var(--ease);
+  }
+  .date-chip:active { transform: scale(0.94); }
+  @media (hover: hover) { .date-chip:hover { background: var(--fill2); } }
+  .date-chip.active { background: var(--accent); color: #fff; }
+  .folder-chip { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+  .folder-chip.active { background: var(--indigo); }
+  .loc-chip-est { color: #B45F00; }
+  @media (prefers-color-scheme: dark) { .loc-chip-est { color: var(--orange); } }
+  .loc-chip-est.active { background: var(--orange); color: #fff; }
+
+  .date-range-row { display: flex; gap: 10px; margin-top: 10px; }
+  .date-range-row[hidden] { display: none; }
+  .date-range-field { flex: 1; display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--label2); }
+  .date-range-field input[type="date"], .set-field input[type="number"] {
+    font-size: 15px;
+    color: var(--label);
+    background: var(--fill);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 10px;
+    min-height: 40px;
+    width: 100%;
+    font-variant-numeric: tabular-nums;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .group { background: var(--card); border-radius: 14px; padding: 0 14px; }
+  .group > * { border-bottom: 0.5px solid var(--sep); }
+  .group > *:last-child { border-bottom: none; }
+  .group-title { margin: 16px 6px 7px; font-size: 13px; font-weight: 600; color: var(--label2); }
+  #settings-body > .group + .group { margin-top: 12px; }
+  #settings-body > .group-title + .group { margin-top: 0; }
+
+  .set-row, .set-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    font-size: 15px;
+  }
+  .set-field { justify-content: space-between; }
+  .set-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .set-field input[type="number"] { width: 92px; text-align: right; flex-shrink: 0; }
+  .set-field input[disabled] { opacity: 0.5; }
+  #set-offsets { max-height: 230px; overflow-y: auto; }
+
+  .set-row input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    order: 2;
+    margin: 0 0 0 auto;
+    flex-shrink: 0;
+    position: relative;
+    width: 51px;
+    height: 31px;
+    border-radius: 999px;
+    background: var(--fill2);
+    transition: background 0.3s var(--ease);
+    cursor: pointer;
+  }
+  .set-row input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18), 0 1px 1px rgba(0, 0, 0, 0.16);
+    transition: transform 0.35s var(--ease), width 0.2s var(--ease);
+  }
+  .set-row input[type="checkbox"]:active::after { width: 33px; }
+  .set-row input[type="checkbox"]:checked { background: var(--green); }
+  .set-row input[type="checkbox"]:checked::after { transform: translateX(20px); }
+  .set-row input[type="checkbox"]:checked:active::after { transform: translateX(14px); }
+
+  .settings-status { font-size: 13px; line-height: 1.45; color: var(--label2); }
+  .settings-status.dirty { color: #B45F00; }
+  @media (prefers-color-scheme: dark) { .settings-status.dirty { color: var(--orange); } }
+  #settings-body { margin-top: 12px; }
+  .set-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; }
+
+  /* List */
+  #list-scroll { padding: 6px 16px 8px; }
+  .list-section-title { font-size: 13px; font-weight: 600; color: var(--label2); padding: 14px 6px 8px; }
+  .list-group { background: var(--card); border-radius: 16px; overflow: hidden; animation: fade-in 0.45s var(--ease); }
+  .hint-note { margin: 0 6px 10px; font-size: 13px; line-height: 1.5; color: var(--label2); }
+
+  .photo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px 9px 12px;
+    position: relative;
+    transition: background 0.2s var(--ease);
+  }
+  .photo-row + .photo-row::before { content: ''; position: absolute; top: 0; left: 110px; right: 0; height: 0.5px; background: var(--sep); }
+  @media (hover: hover) { .photo-row:hover { background: var(--fill); } }
+  .photo-row:active { background: var(--fill2); }
+  .photo-row.active { background: var(--accent-tint); }
+  .photo-row:focus-visible { outline-offset: -3px; }
+
+  .row-badge {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .row-badge.no-gps { background: var(--fill); color: var(--label2); }
+  .row-badge.est { background: transparent; box-shadow: inset 0 0 0 1.5px var(--orange); color: #B45F00; }
+  @media (prefers-color-scheme: dark) { .row-badge.est { color: var(--orange); } }
+
+  .row-thumb-wrap { flex-shrink: 0; width: 52px; height: 52px; position: relative; }
+  .row-thumb {
+    width: 100%;
+    height: 100%;
+    border-radius: 11px;
+    object-fit: cover;
+    background: var(--fill);
+    display: block;
+    box-shadow: inset 0 0 0 0.5px var(--hairline);
+  }
+  .row-thumb.broken { display: flex; align-items: center; justify-content: center; color: var(--label2); font-size: 10px; text-align: center; padding: 2px; }
+  .play-badge-sm {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .play-badge-sm svg { margin-left: 1px; }
+
+  .row-meta { min-width: 0; flex: 1; }
+  .row-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-time { font-size: 13px; color: var(--label2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+
+  #empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 36px 28px 28px;
+    color: var(--label2);
+  }
+  #empty-state svg { margin-bottom: 16px; color: var(--accent); }
+  #empty-state h2 { font-size: 21px; color: var(--label); margin: 0 0 8px; font-weight: 700; letter-spacing: -0.022em; }
+  #empty-state p { font-size: 15px; line-height: 1.45; max-width: 280px; margin: 0; }
 
   /* ---------- Lightbox ---------- */
 
   #lightbox {
     position: fixed;
     inset: 0;
-    background: rgba(20, 23, 17, 0.95);
-    display: none;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
-    flex-direction: column;
+    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    background: rgba(0, 0, 0, calc(0.88 * var(--lb-dim, 1)));
+    -webkit-backdrop-filter: blur(34px) saturate(150%);
+    backdrop-filter: blur(34px) saturate(150%);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s var(--ease), visibility 0s linear 0.3s;
   }
-  #lightbox.active { display: flex; }
+  #lightbox.active { opacity: 1; visibility: visible; transition: opacity 0.3s var(--ease); }
 
-  #lightbox-media-wrap { max-width: 88vw; max-height: 78vh; display: flex; align-items: center; justify-content: center; touch-action: pan-y; }
-  #lightbox-img, #lightbox-video {
-    max-width: 88vw;
-    max-height: 78vh;
-    object-fit: contain;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    border-radius: 4px;
-    display: none;
-  }
-  #lightbox-caption { margin-top: 16px; color: var(--paper); font-size: 12.5px; text-align: center; opacity: 0.85; }
-  #lightbox-caption .mono { color: #E3AE8F; }
-
-  .lightbox-btn {
-    position: absolute;
-    background: rgba(237,230,214,0.1);
-    border: 1px solid rgba(237,230,214,0.3);
-    color: var(--paper);
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
+  #lightbox-media-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    font-size: 18px;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.12s ease;
+    transform: scale(0.94);
+    transition: transform 0.5s var(--ease);
+    touch-action: none;
   }
-  .lightbox-btn:hover { background: rgba(237,230,214,0.25); }
-  #lightbox-close { top: 20px; right: 24px; }
-  #lightbox-prev { left: 24px; top: 50%; transform: translateY(-50%); }
-  #lightbox-next { right: 24px; top: 50%; transform: translateY(-50%); }
+  #lightbox.active #lightbox-media-wrap { transform: none; }
+  #lightbox-media-wrap.dragging { transition: none; }
+  #lightbox-img, #lightbox-video {
+    max-width: min(94vw, 1500px);
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 130px);
+    object-fit: contain;
+    border-radius: 14px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+    display: none;
+  }
+  #lightbox-caption {
+    margin-top: 18px;
+    max-width: calc(100vw - 32px);
+    padding: 9px 18px;
+    border-radius: 999px;
+    background: rgba(120, 120, 128, 0.32);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    color: #fff;
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  #lightbox-caption .mono { color: rgba(255, 255, 255, 0.75); }
+
+  .lightbox-btn {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(120, 120, 128, 0.36);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.25s var(--ease);
+  }
+  .lightbox-btn:hover { background: rgba(120, 120, 128, 0.55); }
+  .lightbox-btn:active { transform: scale(0.9); }
+  .lightbox-btn svg { width: 20px; height: 20px; }
+  #lightbox-close { top: calc(var(--safe-top) + 16px); right: calc(var(--safe-right) + 16px); }
+  #lightbox-prev { left: calc(var(--safe-left) + 16px); top: 50%; margin-top: -22px; }
+  #lightbox-next { right: calc(var(--safe-right) + 16px); top: 50%; margin-top: -22px; }
+
+  /* ---------- Phones ---------- */
 
   @media (max-width: 760px) {
-    #app { flex-direction: column; }
-    #sidebar { width: 100%; min-width: 0; height: 40vh; order: 2; border-right: none; border-top: 1px solid var(--paper-darker); }
-    #map-container { height: 60vh; order: 1; }
-    .lightbox-btn { width: 44px; height: 44px; font-size: 20px; }
-    #lightbox-prev { left: 10px; }
-    #lightbox-next { right: 10px; }
-    #lightbox-close { top: 12px; right: 12px; }
-    .leaflet-popup-content { width: 208px !important; }
+    #sidebar {
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: calc(100dvh - var(--safe-top) - 10px);
+      border-radius: 28px 28px 0 0;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2), inset 0 0.5px 0 var(--hairline);
+      transform: translate3d(0, var(--sheet-y, 62vh), 0);
+      transition: transform 0.55s var(--ease);
+      will-change: transform;
+    }
+    #sidebar.dragging { transition: none; }
+    #sheet-handle { touch-action: none; }
+    #grabber {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 24px;
+      padding: 0;
+      border: none;
+      background: none;
+    }
+    #grabber span { width: 38px; height: 5px; border-radius: 3px; background: var(--label3); transition: background 0.2s; }
+    #sidebar-header { padding: 2px 20px 8px; }
+    .brand-mark { width: 42px; height: 42px; }
+    .brand h1 { font-size: 24px; }
+    #controls { padding-bottom: 16px; }
+    #sheet-scroll { padding-bottom: calc(var(--safe-bottom) + 28px); }
+    #sheet-scroll.locked { overflow-y: hidden; touch-action: none; }
+    .leaflet-control-zoom { display: none; }
+    .leaflet-top.leaflet-left .leaflet-control-attribution { margin: 8px 0 0 8px; }
+    input[type="number"], input[type="date"] { font-size: 16px !important; }
+    .lightbox-btn { width: 42px; height: 42px; }
+    #lightbox-prev { left: calc(var(--safe-left) + 8px); }
+    #lightbox-next { right: calc(var(--safe-right) + 8px); }
+    .leaflet-popup-content { width: 232px !important; }
+    .popup-thumb-wrap { height: 148px; }
+    .popup-date { font-size: 16px; white-space: nowrap; }
+    .popup-row .v { font-size: 12.5px; }
   }
+
+  @media (pointer: coarse) { .leaflet-control-zoom { display: none; } }
 
   @media (prefers-reduced-motion: reduce) {
-    .btn, .photo-row, #progress-fill, .date-chip { transition: none; }
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
   }
-
-  #list-scroll::-webkit-scrollbar { width: 8px; }
-  #list-scroll::-webkit-scrollbar-thumb { background: var(--paper-darker); border-radius: 4px; }
 </style>
 </head>
 <body>
 
 <div id="app">
 
-  <div id="sidebar">
-    <div id="sidebar-header">
-      <div class="brand">
-        <svg class="brand-mark" width="30" height="30" viewBox="0 0 30 30" fill="none">
-          <circle cx="15" cy="15" r="14" stroke="#C4501F" stroke-width="1.4"/>
-          <path d="M15 4 V8 M15 22 V26 M4 15 H8 M22 15 H26" stroke="#C4501F" stroke-width="1.4"/>
-          <path d="M15 9 L18 15 L15 21 L12 15 Z" fill="#23291F"/>
-        </svg>
-        <div>
-          <h1 class="display">Trailmarks</h1>
-          <p class="brand-sub">Photo &amp; video trail mapper</p>
-        </div>
-      </div>
-      <div id="stats-line">Select a folder to begin.</div>
-    </div>
-
-    <div id="controls">
-      <button class="btn" id="select-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="#EDE6D6" stroke-width="1.8"/></svg>
-        Select photo &amp; video folder
-      </button>
-      <input type="file" id="folder-input" webkitdirectory directory multiple accept="image/*,video/*,.insv,.insp,.lrv,.heic,.heif" />
-      <div id="progress-wrap">
-        <div id="progress-track"><div id="progress-fill"></div></div>
-        <div id="progress-text" class="mono"></div>
-      </div>
-    </div>
-
-    <div id="settings-panel" hidden>
-      <div class="date-filter-head">
-        <span class="date-filter-title">Folder settings</span>
-        <button type="button" id="settings-toggle" class="date-filter-link" aria-expanded="false">Edit</button>
-      </div>
-      <div id="settings-status" class="settings-status"></div>
-      <div id="settings-body" hidden>
-        <label class="set-row"><input type="checkbox" id="set-est-enabled" /> Estimate missing locations</label>
-        <label class="set-field"><span class="set-label">Max gap between two GPS files (min)</span><input type="number" id="set-est-bracket" min="1" max="1440" step="1" /></label>
-        <label class="set-field"><span class="set-label">Max distance to nearest GPS file (min)</span><input type="number" id="set-est-nearest" min="1" max="1440" step="1" /></label>
-        <div class="set-subtitle">Camera clock offset (minutes)</div>
-        <div id="set-offsets"></div>
-        <label class="set-row"><input type="checkbox" id="set-remember-filters" /> Also remember the current filters</label>
-        <div class="set-actions">
-          <button type="button" class="btn small" id="settings-save">Save to folder</button>
-          <button type="button" class="date-filter-link" id="settings-reset">Reset to defaults</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="filters-panel" hidden>
-      <div id="date-filter-section" class="filter-section" hidden>
-        <div class="date-filter-head">
-          <span class="date-filter-title">Filter by date</span>
-          <button type="button" id="date-range-toggle" class="date-filter-link" aria-expanded="false">Custom range</button>
-          <button type="button" id="date-filter-clear" class="date-filter-link" hidden>Clear</button>
-        </div>
-        <div id="date-chip-row" class="date-chip-row" role="group" aria-label="Filter by day"></div>
-        <div id="date-range-row" class="date-range-row" hidden>
-          <label class="date-range-field">
-            <span>From</span>
-            <input type="date" id="date-from" aria-label="Filter from date" />
-          </label>
-          <label class="date-range-field">
-            <span>To</span>
-            <input type="date" id="date-to" aria-label="Filter to date" />
-          </label>
-        </div>
-      </div>
-
-      <div id="loc-filter-section" class="filter-section" hidden>
-        <div class="date-filter-head">
-          <span class="date-filter-title">Filter by location source</span>
-          <button type="button" id="loc-filter-clear" class="date-filter-link" hidden>Clear</button>
-        </div>
-        <div id="loc-chip-row" class="date-chip-row" role="group" aria-label="Filter by location source"></div>
-      </div>
-
-      <div id="folder-filter-section" class="filter-section" hidden>
-        <div class="date-filter-head">
-          <span class="date-filter-title">Filter by folder</span>
-          <button type="button" id="folder-filter-clear" class="date-filter-link" hidden>Clear</button>
-        </div>
-        <div id="folder-chip-row" class="date-chip-row" role="group" aria-label="Filter by folder"></div>
-      </div>
-    </div>
-
-    <div id="list-scroll">
-      <div id="empty-state">
-        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-          <path d="M6 40 L18 24 L26 34 L34 20 L46 40 Z" stroke="#565E4C" stroke-width="1.6" stroke-linejoin="round"/>
-          <circle cx="17" cy="14" r="4" stroke="#565E4C" stroke-width="1.6"/>
-        </svg>
-        <h2 class="display">Nothing to relive yet</h2>
-        <p>Choose the folder your phone saved trip photos and videos to. Everything is read on your device; nothing is uploaded anywhere.</p>
-      </div>
-    </div>
-  </div>
-
   <div id="map-container">
     <div id="map"></div>
-    <div id="map-empty-note">None of these files carry location data.</div>
+    <div id="map-empty-note" role="status">None of these files carry location data.</div>
   </div>
+
+  <aside id="sidebar" aria-label="Photo trail">
+
+    <div id="sheet-handle">
+      <button type="button" id="grabber" aria-label="Resize panel"><span></span></button>
+
+      <div id="sidebar-header">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+            <defs><linearGradient id="brand-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5AC8FA"/><stop offset="1" stop-color="#007AFF"/></linearGradient></defs>
+            <rect width="40" height="40" rx="9.5" fill="url(#brand-bg)"/>
+            <circle cx="20" cy="20" r="11.5" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.4"/>
+            <path d="M20 10 L24.5 20 L20 30 L15.5 20 Z" fill="#fff"/>
+            <circle cx="20" cy="20" r="1.9" fill="#007AFF"/>
+          </svg>
+          <div>
+            <h1 class="display">Trailmarks</h1>
+            <p class="brand-sub">Photo &amp; video trail mapper</p>
+          </div>
+        </div>
+        <div id="stats-line">Select a folder to begin.</div>
+      </div>
+
+      <div id="controls">
+        <button class="btn" id="select-btn" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 015.5 5h3.6a2 2 0 011.5.7l1 1.1a2 2 0 001.5.7h5.4A2.5 2.5 0 0121 10v7.5a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5v-10z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          <span id="select-label">Select photo &amp; video folder</span>
+        </button>
+        <input type="file" id="folder-input" webkitdirectory directory multiple accept="image/*,video/*,.insv,.insp,.lrv,.heic,.heif" />
+        <div id="progress-wrap">
+          <div id="progress-track"><div id="progress-fill"></div></div>
+          <div id="progress-text" class="mono"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="sheet-scroll">
+
+      <div id="settings-panel" hidden>
+        <div class="date-filter-head">
+          <span class="date-filter-title">Folder settings</span>
+          <button type="button" id="settings-toggle" class="date-filter-link" aria-expanded="false">Edit</button>
+        </div>
+        <div id="settings-status" class="settings-status"></div>
+        <div id="settings-body" hidden>
+          <p id="settings-write-note" class="settings-status" style="margin:0 6px 12px"></p>
+          <div class="group">
+            <label class="set-row"><input type="checkbox" id="set-est-enabled" /><span>Estimate missing locations</span></label>
+            <label class="set-field"><span class="set-label">Max gap between GPS files (min)</span><input type="number" id="set-est-bracket" min="1" max="1440" step="1" inputmode="numeric" /></label>
+            <label class="set-field"><span class="set-label">Max distance to nearest GPS file (min)</span><input type="number" id="set-est-nearest" min="1" max="1440" step="1" inputmode="numeric" /></label>
+          </div>
+          <div class="group-title">Camera clock offset (minutes)</div>
+          <div class="group" id="set-offsets"></div>
+          <div class="group" style="margin-top:12px">
+            <label class="set-row"><input type="checkbox" id="set-remember-filters" /><span>Also remember the current filters</span></label>
+          </div>
+          <div class="set-actions">
+            <button type="button" class="btn small" id="settings-save">Save to folder</button>
+            <button type="button" class="date-filter-link" id="settings-reset">Reset to defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="filters-panel" hidden>
+        <div id="date-filter-section" class="filter-section" hidden>
+          <div class="date-filter-head">
+            <span class="date-filter-title">Date</span>
+            <button type="button" id="date-range-toggle" class="date-filter-link" aria-expanded="false">Custom range</button>
+            <button type="button" id="date-filter-clear" class="date-filter-link" hidden>Clear</button>
+          </div>
+          <div id="date-chip-row" class="date-chip-row" role="group" aria-label="Filter by day"></div>
+          <div id="date-range-row" class="date-range-row" hidden>
+            <label class="date-range-field">
+              <span>From</span>
+              <input type="date" id="date-from" aria-label="Filter from date" />
+            </label>
+            <label class="date-range-field">
+              <span>To</span>
+              <input type="date" id="date-to" aria-label="Filter to date" />
+            </label>
+          </div>
+        </div>
+
+        <div id="loc-filter-section" class="filter-section" hidden>
+          <div class="date-filter-head">
+            <span class="date-filter-title">Location source</span>
+            <button type="button" id="loc-filter-clear" class="date-filter-link" hidden>Clear</button>
+          </div>
+          <div id="loc-chip-row" class="date-chip-row" role="group" aria-label="Filter by location source"></div>
+        </div>
+
+        <div id="folder-filter-section" class="filter-section" hidden>
+          <div class="date-filter-head">
+            <span class="date-filter-title">Folder</span>
+            <button type="button" id="folder-filter-clear" class="date-filter-link" hidden>Clear</button>
+          </div>
+          <div id="folder-chip-row" class="date-chip-row" role="group" aria-label="Filter by folder"></div>
+        </div>
+      </div>
+
+      <div id="list-scroll">
+        <div id="empty-state">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <circle cx="32" cy="32" r="29" stroke="currentColor" stroke-opacity="0.25" stroke-width="2"/>
+            <path d="M32 11 C23.7 11 17 17.4 17 25.3 C17 36 32 53 32 53 C32 53 47 36 47 25.3 C47 17.4 40.3 11 32 11 Z" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+            <circle cx="32" cy="25" r="5.5" stroke="currentColor" stroke-width="2.2"/>
+          </svg>
+          <h2 class="display">See where you went</h2>
+          <p>Choose the folder with your trip photos and videos. Everything is read on this device and nothing is uploaded.</p>
+        </div>
+      </div>
+
+    </div>
+  </aside>
 
 </div>
 
-<div id="lightbox">
-  <button class="lightbox-btn" id="lightbox-close" aria-label="Close">&times;</button>
-  <button class="lightbox-btn" id="lightbox-prev" aria-label="Previous item">&#8249;</button>
+<div id="lightbox" aria-hidden="true">
+  <button class="lightbox-btn" id="lightbox-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button class="lightbox-btn" id="lightbox-prev" aria-label="Previous item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
   <div id="lightbox-media-wrap">
     <img id="lightbox-img" src="" alt="Full size photo" />
     <video id="lightbox-video" controls playsinline></video>
   </div>
-  <button class="lightbox-btn" id="lightbox-next" aria-label="Next item">&#8250;</button>
+  <button class="lightbox-btn" id="lightbox-next" aria-label="Next item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
   <div id="lightbox-caption"></div>
 </div>
 
@@ -746,6 +962,7 @@
   const settingsToggle = document.getElementById('settings-toggle');
   const settingsStatus = document.getElementById('settings-status');
   const settingsBody = document.getElementById('settings-body');
+  const settingsWriteNote = document.getElementById('settings-write-note');
   const setEstEnabled = document.getElementById('set-est-enabled');
   const setEstBracket = document.getElementById('set-est-bracket');
   const setEstNearest = document.getElementById('set-est-nearest');
@@ -962,6 +1179,7 @@
     applyMapLayer(settings.mapLayer);
     applyFilterState(settings.filters);
     renderSettingsPanel();
+    onFolderLoaded();
   }
 
   // Many filenames from phone camera apps encode the exact capture
@@ -1342,6 +1560,152 @@
     }
   }
 
+  // ---------- Layout: side panel on desktop, bottom sheet on phones ----------
+
+  const mobileMQ = window.matchMedia('(max-width: 760px)');
+  const sidebarEl = document.getElementById('sidebar');
+  const sheetHandle = document.getElementById('sheet-handle');
+  const sheetScroll = document.getElementById('sheet-scroll');
+  const grabberBtn = document.getElementById('grabber');
+  const selectLabel = document.getElementById('select-label');
+  const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+
+  let sheetState = 'half';   // 'peek' | 'half' | 'full'
+  let sheetY = 0;
+  let lastDragEnd = 0;
+  let lastBounds = null;
+  let drag = null;
+
+  function isMobileLayout() { return mobileMQ.matches; }
+
+  if (coarsePointer && !window.showDirectoryPicker) selectLabel.textContent = 'Choose photos & videos';
+
+  const safeProbe = document.createElement('div');
+  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none';
+  document.body.appendChild(safeProbe);
+
+  function sheetPositions() {
+    const H = sidebarEl.offsetHeight;
+    const peek = Math.max(0, H - Math.ceil(sheetHandle.offsetHeight + safeProbe.offsetHeight + 6));
+    const half = Math.max(0, Math.min(peek, H - Math.round(window.innerHeight * 0.62)));
+    return { full: 0, half, peek };
+  }
+
+  function setSheetY(y, animate) {
+    sheetY = y;
+    sidebarEl.classList.toggle('dragging', !animate);
+    sidebarEl.style.setProperty('--sheet-y', y + 'px');
+  }
+
+  function setSheet(state) {
+    sheetState = state;
+    if (!isMobileLayout()) return;
+    setSheetY(sheetPositions()[state], true);
+    sheetScroll.classList.toggle('locked', state !== 'full');
+    grabberBtn.setAttribute('aria-label', state === 'full' ? 'Shrink panel' : 'Expand panel');
+  }
+
+  function layoutSheet(animate) {
+    if (isMobileLayout()) {
+      setSheetY(sheetPositions()[sheetState], !!animate);
+      sheetScroll.classList.toggle('locked', sheetState !== 'full');
+    } else {
+      sidebarEl.style.removeProperty('--sheet-y');
+      sidebarEl.classList.remove('dragging');
+      sheetScroll.classList.remove('locked');
+    }
+  }
+
+  // Keep markers and popups clear of the panel or the sheet.
+  function mapPadding() {
+    if (isMobileLayout()) {
+      const pos = sheetPositions();
+      const covered = sidebarEl.offsetHeight - pos.peek;
+      return { tl: [20, 76], br: [20, covered + 24] };
+    }
+    return { tl: [sidebarEl.offsetWidth + 44, 84], br: [64, 56] };
+  }
+
+  function fitAll() {
+    if (!map || !lastBounds) return;
+    const p = mapPadding();
+    map.fitBounds(lastBounds, { paddingTopLeft: p.tl, paddingBottomRight: p.br, maxZoom: 18 });
+  }
+
+  function onFolderLoaded() {
+    selectBtn.classList.add('tinted');
+    selectLabel.textContent = coarsePointer && !window.showDirectoryPicker ? 'Choose other photos' : 'Choose another folder';
+    if (isMobileLayout()) setSheet('half');
+  }
+
+  function startDrag(e, fromScroll) {
+    if (!isMobileLayout() || e.touches.length !== 1) return;
+    drag = {
+      startY: e.touches[0].clientY,
+      startSheetY: sheetY,
+      active: false,
+      fromScroll,
+      samples: [{ y: e.touches[0].clientY, t: e.timeStamp }],
+    };
+  }
+
+  function moveDrag(e) {
+    if (!drag) return;
+    const y = e.touches[0].clientY;
+    const dy = y - drag.startY;
+    if (!drag.active) {
+      if (Math.abs(dy) < 8) return;
+      // Inside the scrolling content at full height, only a pull down from the very top moves the sheet.
+      if (drag.fromScroll && sheetState === 'full' && !(sheetScroll.scrollTop <= 0 && dy > 0)) { drag = null; return; }
+      drag.active = true;
+      drag.startY = y;
+      drag.startSheetY = sheetY;
+      sidebarEl.classList.add('dragging');
+    }
+    if (e.cancelable) e.preventDefault();
+    const pos = sheetPositions();
+    let ny = drag.startSheetY + (y - drag.startY);
+    if (ny < 0) ny = ny / 3;
+    if (ny > pos.peek) ny = pos.peek + (ny - pos.peek) / 3;
+    setSheetY(ny, false);
+    drag.samples.push({ y, t: e.timeStamp });
+    if (drag.samples.length > 6) drag.samples.shift();
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (!d.active) return;
+    lastDragEnd = performance.now();
+    const s = d.samples;
+    const v = s.length > 1 ? (s[s.length - 1].y - s[0].y) / Math.max(1, s[s.length - 1].t - s[0].t) : 0;
+    const pos = sheetPositions();
+    const projected = sheetY + v * 200;
+    let best = 'full', bestDist = Infinity;
+    ['full', 'half', 'peek'].forEach((k) => {
+      const dist = Math.abs(pos[k] - projected);
+      if (dist < bestDist) { bestDist = dist; best = k; }
+    });
+    setSheet(best);
+  }
+
+  [[sheetHandle, false], [sheetScroll, true]].forEach(([el, fromScroll]) => {
+    el.addEventListener('touchstart', (e) => startDrag(e, fromScroll), { passive: true });
+    el.addEventListener('touchmove', moveDrag, { passive: false });
+    el.addEventListener('touchend', endDrag, { passive: true });
+    el.addEventListener('touchcancel', endDrag, { passive: true });
+  });
+
+  grabberBtn.addEventListener('click', () => {
+    if (performance.now() - lastDragEnd < 350) return;
+    setSheet(sheetState === 'peek' ? 'half' : sheetState === 'half' ? 'full' : 'half');
+  });
+
+  if (mobileMQ.addEventListener) mobileMQ.addEventListener('change', () => layoutSheet(false));
+  window.addEventListener('resize', () => layoutSheet(false));
+  if (window.ResizeObserver) new ResizeObserver(() => { if (!drag) layoutSheet(true); }).observe(sheetHandle);
+
   // ---------- Folder settings (trailmarks.json) ----------
   // An optional JSON file kept next to the photos. It is only read when a
   // folder is opened and only written when the user clicks Save; photos and
@@ -1526,11 +1890,11 @@
     } else if (folderOverrides.size) {
       text = `Loaded ${folderOverrides.size} subfolder override${folderOverrides.size === 1 ? '' : 's'}. No root ${SETTINGS_FILE} yet.`;
     } else {
-      text = `No ${SETTINGS_FILE} in this folder yet. Nothing is written until you click Save.`;
+      text = `No ${SETTINGS_FILE} yet. Nothing is written until you save.`;
     }
-    text += rootHandle
-      ? ' Saving writes into the folder you opened.'
-      : ' This browser cannot write into the folder, so Save downloads the file; put it in the photo folder.';
+    settingsWriteNote.textContent = rootHandle
+      ? 'Save writes trailmarks.json into the folder you opened.'
+      : 'This browser cannot write into the folder, so Save downloads trailmarks.json. Put it in the photo folder.';
     settingsStatus.textContent = text;
     settingsStatus.classList.toggle('dirty', settingsDirty && !settingsNote);
   }
@@ -2151,11 +2515,13 @@
     listScroll.innerHTML = '';
     if (allPhotos.length === 0) {
       setEmptyStateCopy('Nothing to relive yet', 'Choose the folder your phone saved trip photos and videos to. Everything is read on your device; nothing is uploaded anywhere.');
+      listScroll.appendChild(emptyState);
       emptyState.style.display = 'flex';
       return;
     }
     if (visiblePhotos.length === 0) {
       setEmptyStateCopy('No matches for this filter', 'Nothing matches that date range, folder or location source. Try a wider selection or clear the filters above.');
+      listScroll.appendChild(emptyState);
       emptyState.style.display = 'flex';
       return;
     }
@@ -2166,7 +2532,10 @@
       title.className = 'list-section-title';
       title.textContent = `Trail (${waypoints.length})`;
       listScroll.appendChild(title);
-      waypoints.forEach((p, idx) => listScroll.appendChild(buildRow(p, idx + 1)));
+      const group = document.createElement('div');
+      group.className = 'list-group';
+      waypoints.forEach((p, idx) => group.appendChild(buildRow(p, idx + 1)));
+      listScroll.appendChild(group);
     }
     if (noGpsPhotos.length > 0) {
       const title = document.createElement('div');
@@ -2175,11 +2544,14 @@
       listScroll.appendChild(title);
       if (noGpsPhotos.length === allPhotos.length) {
         const note = document.createElement('p');
-        note.style.cssText = 'font-size:11px;color:var(--ink-soft);padding:0 10px 10px;line-height:1.5;';
+        note.className = 'hint-note';
         note.textContent = 'None of these files carry GPS data. This is usually stripped before the files reach this folder by a share sheet, chat app, cloud download, or a phone\'s Photos/Gallery picker, rather than something this app can recover. On iPhone, try Browse instead of Photo Library; on Android, try Files instead of Photos. Insta360 cameras only store GPS when a GPS source was active while recording.';
         listScroll.appendChild(note);
       }
-      noGpsPhotos.forEach((p) => listScroll.appendChild(buildRow(p, null)));
+      const noGroup = document.createElement('div');
+      noGroup.className = 'list-group';
+      noGpsPhotos.forEach((p) => noGroup.appendChild(buildRow(p, null)));
+      listScroll.appendChild(noGroup);
     }
   }
 
@@ -2206,7 +2578,7 @@
     };
     thumbWrap.appendChild(thumb);
     if (photo.isVideo) {
-      thumbWrap.insertAdjacentHTML('beforeend', '<div class="play-badge-sm"><svg width="7" height="8" viewBox="0 0 7 8" fill="#EDE6D6"><path d="M0 0 L7 4 L0 8 Z"/></svg></div>');
+      thumbWrap.insertAdjacentHTML('beforeend', '<div class="play-badge-sm"><svg width="7" height="8" viewBox="0 0 7 8" fill="#FFFFFF"><path d="M0 0 L7 4 L0 8 Z"/></svg></div>');
     }
 
     const meta = document.createElement('div');
@@ -2229,8 +2601,12 @@
     row.appendChild(meta);
 
     const activate = () => {
-      if (hasLocation(photo) && photo.marker) focusMarker(photo);
-      else openLightbox(photo.id);
+      if (hasLocation(photo) && photo.marker) {
+        if (isMobileLayout()) setSheet('peek');
+        focusMarker(photo);
+      } else {
+        openLightbox(photo.id);
+      }
     };
     row.addEventListener('click', activate);
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
@@ -2278,7 +2654,25 @@
 
   function ensureMap() {
     if (map) return;
-    map = L.map('map', { zoomControl: true, scrollWheelZoom: true, keyboard: false, maxZoom: 19 }).setView([20, 0], 2);
+    map = L.map('map', {
+      zoomControl: false,
+      scrollWheelZoom: true,
+      keyboard: false,
+      maxZoom: 19,
+      zoomSnap: 0.5,
+      worldCopyJump: true,
+      maxBounds: [[-85.05, -540], [85.05, 540]],
+      maxBoundsViscosity: 1,
+    });
+    // Never zoom out past the point where the world no longer fills the screen (no black bands).
+    const WORLD = [[-85.05, -180], [85.05, 180]];
+    const fitWorldZoom = () => {
+      map.setMinZoom(Math.max(1, map.getBoundsZoom(WORLD, true)));
+    };
+    fitWorldZoom();
+    map.setView([30, 8], map.getMinZoom(), { animate: false });
+    window.addEventListener('resize', () => { fitWorldZoom(); });
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -2298,6 +2692,29 @@
       currentBaseName = e.name;
       if (!applyingSettings) { settings.mapLayer = e.name; markSettingsDirty(); }
     });
+
+    if (map.attributionControl && isMobileLayout()) map.attributionControl.setPosition('topleft');
+
+    // "Show everything" button under the layer switcher
+    const FitControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd() {
+        const box = L.DomUtil.create('div', 'leaflet-bar');
+        const a = L.DomUtil.create('a', 'fit-btn', box);
+        a.href = '#';
+        a.title = 'Show the whole trail';
+        a.setAttribute('role', 'button');
+        a.setAttribute('aria-label', 'Show the whole trail');
+        a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>';
+        L.DomEvent.disableClickPropagation(box);
+        L.DomEvent.on(a, 'click', (e) => { L.DomEvent.preventDefault(e); fitAll(); });
+        return box;
+      },
+    });
+    new FitControl().addTo(map);
+
+    // Tapping the map on a phone tucks the sheet away
+    map.on('click', () => { if (isMobileLayout() && sheetState !== 'peek') setSheet('peek'); });
 
     layerGroup = L.layerGroup().addTo(map);
   }
@@ -2352,11 +2769,8 @@
     const latlngs = waypoints.map((p) => [p.lat, p.lon]);
 
     if (waypoints.length > 1) {
-      const trailLine = L.polyline(latlngs, { color: '#C4501F', weight: 3, opacity: 0.85, dashArray: '2 10', lineCap: 'round' }).addTo(layerGroup);
-      if (!reducedMotion) {
-        const pathEl = trailLine.getElement();
-        if (pathEl) pathEl.classList.add('trail-path');
-      }
+      L.polyline(latlngs, { color: '#ffffff', weight: 9, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(layerGroup);
+      L.polyline(latlngs, { color: '#0A84FF', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(layerGroup);
 
       // Small arrows at each segment's midpoint, rotated to the bearing
       // between the two waypoints, make the chronological direction of
@@ -2370,10 +2784,11 @@
       }
     }
 
+    const pad = mapPadding();
     waypoints.forEach((photo, idx) => {
       const kind = idx === 0 ? 'start' : (idx === waypoints.length - 1 && waypoints.length > 1) ? 'end' : 'mid';
       const marker = L.marker([photo.lat, photo.lon], { icon: waypointIcon(photo.estimated ? 'est' : kind, idx + 1, photo.isVideo) });
-      marker.bindPopup(buildPopupHTML(photo, idx + 1), { closeButton: true, maxWidth: 260 });
+      marker.bindPopup(buildPopupHTML(photo, idx + 1), { closeButton: true, maxWidth: 260, autoPanPaddingTopLeft: pad.tl, autoPanPaddingBottomRight: pad.br });
       marker.on('popupopen', () => {
         const wrap = document.getElementById(`popup-thumb-${photo.id}`);
         if (wrap) {
@@ -2400,6 +2815,7 @@
         const nextBtn = document.getElementById(`popup-next-${photo.id}`);
         if (nextBtn) nextBtn.addEventListener('click', (e) => { e.stopPropagation(); stepActiveWaypoint(1); });
         setActiveWaypoint(idx);
+        if (isMobileLayout()) setSheet('peek');
       });
       marker.on('popupclose', () => {
         if (activeWaypointIdx === idx) clearActiveWaypoint();
@@ -2409,8 +2825,8 @@
       photo.waypointIndex = idx;
     });
 
-    const bounds = L.latLngBounds(latlngs);
-    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+    lastBounds = L.latLngBounds(latlngs);
+    fitAll();
   }
 
   function buildPopupHTML(photo, order) {
@@ -2420,7 +2836,7 @@
       ? `<div class="popup-row"><span class="k">Duration</span><span class="v">${formatDuration(photo.duration) || '-'}</span></div>`
       : '';
     const durationBadge = photo.isVideo && photo.duration ? `<div class="duration-badge">${formatDuration(photo.duration)}</div>` : '';
-    const playBadge = photo.isVideo ? '<div class="play-badge-lg"><svg width="14" height="16" viewBox="0 0 14 16" fill="#EDE6D6"><path d="M0 0 L14 8 L0 16 Z"/></svg></div>' : '';
+    const playBadge = photo.isVideo ? '<div class="play-badge-lg"><svg width="14" height="16" viewBox="0 0 14 16" fill="#FFFFFF"><path d="M0 0 L14 8 L0 16 Z"/></svg></div>' : '';
     const orderLine = waypoints.length > 1
       ? `<div class="popup-nav">
            <button type="button" class="popup-nav-btn" id="popup-prev-${photo.id}" aria-label="Previous waypoint">&#8249;</button>
@@ -2457,9 +2873,20 @@
 
   function focusMarker(photo) {
     const target = [photo.lat, photo.lon];
-    if (reducedMotion) map.setView(target, Math.max(map.getZoom(), 18));
-    else map.flyTo(target, Math.max(map.getZoom(), 18), { duration: 0.9 });
-    setTimeout(() => photo.marker && photo.marker.openPopup(), reducedMotion ? 0 : 600);
+    const zoom = Math.max(map.getZoom(), 18);
+    const open = () => { if (photo.marker) photo.marker.openPopup(); };
+    const here = map.getZoom() === zoom && map.getCenter().distanceTo(target) < 1;
+    if (reducedMotion || here) {
+      if (!here) map.setView(target, zoom, { animate: false });
+      setTimeout(open, 0);
+      return;
+    }
+    // Open the popup once the flight has landed so its auto-pan keeps it clear of the panel or sheet.
+    let opened = false;
+    const openOnce = () => { if (!opened) { opened = true; open(); } };
+    map.once('moveend', openOnce);
+    setTimeout(openOnce, 1400);
+    map.flyTo(target, zoom, { duration: 0.9 });
   }
 
   // ---------- Marker selection & keyboard navigation ----------
@@ -2528,6 +2955,9 @@
     lightboxIndex = visiblePhotos.findIndex((p) => p.id === photoId);
     if (lightboxIndex === -1) return;
     showLightboxItem();
+    lightboxMediaWrap.style.transform = '';
+    lightbox.style.removeProperty('--lb-dim');
+    lightbox.setAttribute('aria-hidden', 'false');
     lightbox.classList.add('active');
   }
 
@@ -2555,10 +2985,56 @@
 
   function closeLightbox() {
     lightbox.classList.remove('active');
+    lightbox.setAttribute('aria-hidden', 'true');
     lightboxVideo.pause();
-    lightboxVideo.src = '';
-    lightboxImg.src = '';
+    setTimeout(() => {
+      if (lightbox.classList.contains('active')) return;
+      lightboxVideo.src = '';
+      lightboxImg.src = '';
+      lightboxMediaWrap.style.transform = '';
+      lightbox.style.removeProperty('--lb-dim');
+    }, 320);
   }
+
+  // Swipe down to dismiss, with the photo following the finger
+  (function () {
+    let sx = 0, sy = 0, dy = 0, tracking = false, pulling = false;
+    lightboxMediaWrap.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1 || lightboxVideo.style.display === 'block') return;
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+      dy = 0;
+      tracking = true;
+      pulling = false;
+    }, { passive: true });
+    lightboxMediaWrap.addEventListener('touchmove', (e) => {
+      if (!tracking) return;
+      const dx = e.touches[0].clientX - sx;
+      dy = e.touches[0].clientY - sy;
+      if (!pulling && dy > 12 && dy > Math.abs(dx) * 1.2) {
+        pulling = true;
+        lightboxMediaWrap.classList.add('dragging');
+      }
+      if (pulling) {
+        lightboxMediaWrap.style.transform = `translateY(${dy}px) scale(${1 - Math.min(dy / 1400, 0.18)})`;
+        lightbox.style.setProperty('--lb-dim', String(1 - Math.min(dy / 420, 0.75)));
+      }
+    }, { passive: true });
+    const finish = () => {
+      if (!tracking) return;
+      tracking = false;
+      lightboxMediaWrap.classList.remove('dragging');
+      if (pulling && dy > 110) {
+        closeLightbox();
+      } else if (pulling) {
+        lightboxMediaWrap.style.transform = '';
+        lightbox.style.removeProperty('--lb-dim');
+      }
+      pulling = false;
+    };
+    lightboxMediaWrap.addEventListener('touchend', finish, { passive: true });
+    lightboxMediaWrap.addEventListener('touchcancel', finish, { passive: true });
+  })();
 
   function stepLightbox(delta) {
     if (lightboxIndex === -1) return;
@@ -2597,6 +3073,7 @@
   });
 
   ensureMap();
+  layoutSheet(false);
 })();
 </script>
 
